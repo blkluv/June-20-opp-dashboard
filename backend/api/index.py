@@ -5,12 +5,44 @@ import os
 import sys
 import requests
 from datetime import datetime, timedelta
+import tempfile
+import pickle
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from dotenv import load_dotenv
 load_dotenv()
+
+# Global variable to store sync status in memory (since Vercel is stateless)
+# In production, this would be stored in a database
+SYNC_STATUS_DATA = {
+    'last_sync_total_processed': 0,
+    'last_sync_total_added': 0,
+    'sources': {
+        'grants_gov': {
+            'status': 'available',
+            'last_sync': None,
+            'records_processed': 0,
+            'records_added': 0,
+            'records_updated': 0
+        },
+        'sam_gov': {
+            'status': 'available',
+            'last_sync': None,
+            'records_processed': 0,
+            'records_added': 0,
+            'records_updated': 0
+        },
+        'usa_spending': {
+            'status': 'available',
+            'last_sync': None,
+            'records_processed': 0,
+            'records_added': 0,
+            'records_updated': 0
+        }
+    }
+}
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -63,12 +95,16 @@ class handler(BaseHTTPRequestHandler):
             sam_api_key = os.environ.get('SAM_API_KEY')
             sam_status = 'available' if sam_api_key else 'requires_api_key'
             
+            # Update SAM status in stored data
+            global SYNC_STATUS_DATA
+            SYNC_STATUS_DATA['sources']['sam_gov']['status'] = sam_status
+            
             response = {
                 'status': 'ready',
                 'total_sources': 3,  # Grants.gov + SAM.gov + USASpending.gov
                 'active_sources': 3 if sam_api_key else 2,
-                'last_sync_total_processed': 0,  # Will be updated after sync
-                'last_sync_total_added': 0,      # Will be updated after sync
+                'last_sync_total_processed': SYNC_STATUS_DATA['last_sync_total_processed'],
+                'last_sync_total_added': SYNC_STATUS_DATA['last_sync_total_added'],
                 'rate_limits': {
                     'grants_gov': '1,000 requests/hour',
                     'sam_gov': '450 requests/hour',
@@ -76,27 +112,16 @@ class handler(BaseHTTPRequestHandler):
                 },
                 'sources': {
                     'grants_gov': {
-                        'status': 'available', 
-                        'last_sync': None,
-                        'records_processed': 0,
-                        'records_added': 0,
-                        'records_updated': 0,
+                        **SYNC_STATUS_DATA['sources']['grants_gov'],
                         'rate_limit': '1,000/hour'
                     },
                     'sam_gov': {
-                        'status': sam_status, 
-                        'last_sync': None,
-                        'records_processed': 0,
-                        'records_added': 0,
-                        'records_updated': 0,
+                        **SYNC_STATUS_DATA['sources']['sam_gov'],
+                        'status': sam_status,
                         'rate_limit': '450/hour'
                     },
                     'usa_spending': {
-                        'status': 'available', 
-                        'last_sync': None,
-                        'records_processed': 0,
-                        'records_added': 0,
-                        'records_updated': 0,
+                        **SYNC_STATUS_DATA['sources']['usa_spending'],
                         'rate_limit': '1,000/hour'
                     }
                 },
@@ -107,11 +132,14 @@ class handler(BaseHTTPRequestHandler):
             # Get real opportunities from API sources
             opportunities = self.get_real_opportunities()
             
-            # Check if we got real data or sample data
-            if opportunities and len(opportunities) > 0 and opportunities[0].get('id') != 'sample-1':
-                message = f'Live data from {len(opportunities)} API sources'
+            # Generate appropriate message based on results
+            if opportunities and len(opportunities) > 0:
+                sources_used = set()
+                for opp in opportunities:
+                    sources_used.add(opp.get('source_name', 'Unknown'))
+                message = f'Live data from {len(sources_used)} sources: {", ".join(sources_used)}'
             else:
-                message = 'Sample data - Configure SAM_API_KEY environment variable for real data'
+                message = 'No opportunities found - all API sources returned empty results'
             
             response = {
                 'opportunities': opportunities,
@@ -343,19 +371,35 @@ class handler(BaseHTTPRequestHandler):
         
         self.wfile.write(json.dumps(response).encode())
     
+    def do_OPTIONS(self):
+        """Handle preflight CORS requests"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Max-Age', '86400')
+        self.end_headers()
+    
     def get_real_opportunities(self):
-        """Fetch real opportunities from all available sources"""
+        """Fetch real opportunities from all available sources with pagination"""
+        import time
         opportunities = []
         errors = []
         
-        # Get SAM.gov opportunities if API key is available
+        # Get SAM.gov opportunities with pagination (if API key is available)
         sam_api_key = os.environ.get('SAM_API_KEY')
         if sam_api_key:
             try:
                 print(f"Attempting to fetch SAM.gov data with API key: {sam_api_key[:8]}...")
-                sam_opps = self.fetch_sam_gov_opportunities(sam_api_key)
-                opportunities.extend(sam_opps)
-                print(f"Successfully fetched {len(sam_opps)} SAM.gov opportunities")
+                # Fetch multiple pages to get more data
+                for page in range(3):  # 3 pages = up to 300 opportunities
+                    sam_opps = self.fetch_sam_gov_opportunities_paginated(sam_api_key, page * 100)
+                    opportunities.extend(sam_opps)
+                    print(f"SAM.gov page {page + 1}: fetched {len(sam_opps)} opportunities")
+                    time.sleep(2)  # Delay to avoid rate limiting
+                    if len(sam_opps) < 100:  # No more data
+                        break
+                print(f"Total SAM.gov opportunities: {len([o for o in opportunities if o.get('source_name') == 'SAM.gov'])}")
             except Exception as e:
                 error_msg = f"SAM.gov fetch failed: {str(e)}"
                 print(error_msg)
@@ -363,23 +407,39 @@ class handler(BaseHTTPRequestHandler):
         else:
             print("SAM_API_KEY not found in environment variables")
         
-        # Get Grants.gov opportunities (no API key required)
+        # Get Grants.gov opportunities with pagination
         try:
             print("Attempting to fetch Grants.gov data...")
-            grants_opps = self.fetch_grants_gov_opportunities()
-            opportunities.extend(grants_opps)
-            print(f"Successfully fetched {len(grants_opps)} Grants.gov opportunities")
+            # Fetch multiple pages
+            for page in range(3):  # 3 pages = up to 300 grants
+                grants_opps = self.fetch_grants_gov_opportunities_paginated(page * 100)
+                opportunities.extend(grants_opps)
+                print(f"Grants.gov page {page + 1}: fetched {len(grants_opps)} opportunities")
+                time.sleep(1)  # Small delay
+                if len(grants_opps) < 100:  # No more data
+                    break
+            print(f"Total Grants.gov opportunities: {len([o for o in opportunities if o.get('source_name') == 'Grants.gov'])}")
         except Exception as e:
             error_msg = f"Grants.gov fetch failed: {str(e)}"
             print(error_msg)
             errors.append(error_msg)
         
-        # Get USASpending.gov opportunities (no API key required, 1000 req/hour)
+        # Get USASpending.gov opportunities with multiple time ranges
         try:
             print("Attempting to fetch USASpending.gov data...")
-            usa_opps = self.fetch_usa_spending_opportunities()
-            opportunities.extend(usa_opps)
-            print(f"Successfully fetched {len(usa_opps)} USASpending.gov opportunities")
+            # Fetch from multiple time periods for more data
+            time_ranges = [
+                (30, 0),   # Last 30 days
+                (60, 30),  # 30-60 days ago
+                (90, 60),  # 60-90 days ago
+            ]
+            
+            for start_days, end_days in time_ranges:
+                usa_opps = self.fetch_usa_spending_opportunities_range(start_days, end_days)
+                opportunities.extend(usa_opps)
+                print(f"USASpending.gov {start_days}-{end_days} days ago: fetched {len(usa_opps)} opportunities")
+                time.sleep(1)  # Small delay
+            print(f"Total USASpending.gov opportunities: {len([o for o in opportunities if o.get('source_name') == 'USASpending.gov'])}")
         except Exception as e:
             error_msg = f"USASpending.gov fetch failed: {str(e)}"
             print(error_msg)
@@ -424,17 +484,21 @@ class handler(BaseHTTPRequestHandler):
         """Fetch opportunities from SAM.gov API"""
         url = "https://api.sam.gov/opportunities/v2/search"
         
+        # Clean API key to remove any encoding issues
+        clean_api_key = api_key.strip().replace('\n', '').replace('\r', '')
+        
         params = {
-            "limit": 50,
+            "limit": 100,  # Reduced to avoid rate limits
             "offset": 0,
-            "postedFrom": (datetime.now() - timedelta(days=30)).strftime("%m/%d/%Y"),
+            "postedFrom": (datetime.now() - timedelta(days=30)).strftime("%m/%d/%Y"),  # Back to 30 days
             "postedTo": datetime.now().strftime("%m/%d/%Y"),
             "ptype": "o"  # Solicitation
         }
         
         headers = {
-            "X-API-Key": api_key,
-            "Accept": "application/json"
+            "X-API-Key": clean_api_key,
+            "Accept": "application/json",
+            "User-Agent": "OpportunityDashboard/1.0"
         }
         
         response = requests.get(url, params=params, headers=headers, timeout=30)
@@ -445,9 +509,56 @@ class handler(BaseHTTPRequestHandler):
         
         # Transform data
         processed_opps = []
-        for i, opp in enumerate(opportunities[:500]):  # Increased to 500 for maximum data
+        for i, opp in enumerate(opportunities):  # Process all opportunities, no limit
             processed_opps.append({
                 'id': opp.get('noticeId', f'sam-{i}'),
+                'title': opp.get('title', 'No Title'),
+                'description': opp.get('description', '')[:500] + '...' if len(opp.get('description', '')) > 500 else opp.get('description', ''),
+                'agency_name': opp.get('department', 'Unknown Department'),
+                'estimated_value': opp.get('award', {}).get('amount') if opp.get('award') else None,
+                'due_date': opp.get('responseDeadLine'),
+                'posted_date': opp.get('postedDate'),
+                'status': 'active',
+                'source_type': 'federal_contract',
+                'source_name': 'SAM.gov',
+                'total_score': 85,
+                'opportunity_number': opp.get('solicitationNumber', 'N/A')
+            })
+        
+        return processed_opps
+    
+    def fetch_sam_gov_opportunities_paginated(self, api_key, offset=0):
+        """Fetch opportunities from SAM.gov API with pagination"""
+        url = "https://api.sam.gov/opportunities/v2/search"
+        
+        # Clean API key to remove any encoding issues
+        clean_api_key = api_key.strip().replace('\n', '').replace('\r', '')
+        
+        params = {
+            "limit": 100,
+            "offset": offset,
+            "postedFrom": (datetime.now() - timedelta(days=30)).strftime("%m/%d/%Y"),
+            "postedTo": datetime.now().strftime("%m/%d/%Y"),
+            "ptype": "o"  # Solicitation
+        }
+        
+        headers = {
+            "X-API-Key": clean_api_key,
+            "Accept": "application/json",
+            "User-Agent": "OpportunityDashboard/1.0"
+        }
+        
+        response = requests.get(url, params=params, headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        opportunities = data.get('opportunitiesData', [])
+        
+        # Transform data
+        processed_opps = []
+        for i, opp in enumerate(opportunities):
+            processed_opps.append({
+                'id': opp.get('noticeId', f'sam-{offset}-{i}'),
                 'title': opp.get('title', 'No Title'),
                 'description': opp.get('description', '')[:500] + '...' if len(opp.get('description', '')) > 500 else opp.get('description', ''),
                 'agency_name': opp.get('department', 'Unknown Department'),
@@ -468,9 +579,9 @@ class handler(BaseHTTPRequestHandler):
         url = "https://api.grants.gov/v1/api/search2"
         
         payload = {
-            "rows": 10,
+            "rows": 100,  # Reduced to avoid issues
             "offset": 0,
-            "oppStatuses": ["forecasted", "posted"],
+            "oppStatuses": ["forecasted", "posted", "active"],
             "sortBy": "openDate|desc"
         }
         
@@ -486,7 +597,7 @@ class handler(BaseHTTPRequestHandler):
         
         # Transform data
         processed_opps = []
-        for i, opp in enumerate(opportunities[:500]):  # Increased to 500 for maximum data
+        for i, opp in enumerate(opportunities):  # Process all opportunities, no limit
             processed_opps.append({
                 'id': opp.get('id', f'grants-{i}'),
                 'title': opp.get('title', 'No Title'),
@@ -504,24 +615,15 @@ class handler(BaseHTTPRequestHandler):
         
         return processed_opps
     
-    def fetch_usa_spending_opportunities(self):
-        """Fetch opportunities from USASpending.gov API using correct endpoint"""
-        url = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
+    def fetch_grants_gov_opportunities_paginated(self, offset=0):
+        """Fetch opportunities from Grants.gov API with pagination"""
+        url = "https://api.grants.gov/v1/api/search2"
         
-        # Get recent contract awards with simplified request (removing problematic filters)
         payload = {
-            "filters": {
-                "award_type_codes": ["A", "B", "C", "D"]  # Contract award types only
-            },
-            "fields": [
-                "Award ID",
-                "Recipient Name", 
-                "Award Amount",
-                "Awarding Agency"
-            ],
-            "sort": "Award Amount",
-            "order": "desc",
-            "limit": 500
+            "rows": 100,
+            "offset": offset,
+            "oppStatuses": ["forecasted", "posted", "active"],
+            "sortBy": "openDate|desc"
         }
         
         headers = {
@@ -532,28 +634,160 @@ class handler(BaseHTTPRequestHandler):
         response.raise_for_status()
         
         data = response.json()
-        results = data.get('results', [])
+        opportunities = data.get('oppHits', [])
         
-        # Transform data to match our schema
+        # Transform data
         processed_opps = []
-        for i, award in enumerate(results[:100]):  # Increased limit for more data
-            award_amount = award.get('Award Amount', 0)
+        for i, opp in enumerate(opportunities):
             processed_opps.append({
-                'id': award.get('Award ID', f'usa-{i}'),
-                'title': f"Federal Contract Award - ${award_amount:,.0f}",
-                'description': f"Contract awarded to {award.get('Recipient Name', 'Unknown Recipient')}. Award amount: ${award_amount:,.0f}",
-                'agency_name': award.get('Awarding Agency', 'Unknown Agency'),
-                'estimated_value': award_amount,
-                'due_date': None,  # Award data doesn't have due dates
-                'posted_date': None,  # Simplified request doesn't include dates
-                'status': 'active',  # Mark as active for demo purposes
-                'source_type': 'federal_contract_award',
-                'source_name': 'USASpending.gov',
+                'id': opp.get('id', f'grants-{offset}-{i}'),
+                'title': opp.get('title', 'No Title'),
+                'description': opp.get('description', '')[:500] + '...' if len(opp.get('description', '')) > 500 else opp.get('description', ''),
+                'agency_name': opp.get('agencyName', 'Unknown Agency'),
+                'estimated_value': opp.get('awardCeiling'),
+                'due_date': opp.get('closeDate'),
+                'posted_date': opp.get('openDate'),
+                'status': 'active',
+                'source_type': 'federal_grant',
+                'source_name': 'Grants.gov',
                 'total_score': 80,
-                'opportunity_number': award.get('Award ID', 'N/A')
+                'opportunity_number': opp.get('number', 'N/A')
             })
         
         return processed_opps
+    
+    def fetch_usa_spending_opportunities(self):
+        """Fetch recent federal contracts from USASpending.gov API"""
+        url = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
+        
+        # Get recent contract awards (simplified working request)
+        payload = {
+            "filters": {
+                "award_type_codes": ["A", "B", "C", "D"],  # Contract types
+                "time_period": [
+                    {
+                        "start_date": (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"),
+                        "end_date": datetime.now().strftime("%Y-%m-%d")
+                    }
+                ]
+            },
+            "fields": [
+                "Award ID",
+                "Recipient Name", 
+                "Award Amount",
+                "Start Date",
+                "End Date",
+                "Awarding Agency",
+                "Award Description"
+            ],
+            "sort": "Start Date",
+            "order": "desc",
+            "limit": 100
+        }
+        
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "OpportunityDashboard/1.0"
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            results = data.get('results', [])
+            
+            # Transform data to match our schema
+            processed_opps = []
+            for i, award in enumerate(results):
+                award_amount = award.get('Award Amount', 0) or 0
+                processed_opps.append({
+                    'id': award.get('Award ID', f'usa-{i}'),
+                    'title': f"Federal Contract - {award.get('Recipient Name', 'Contract Opportunity')}",
+                    'description': f"{award.get('Award Description', 'Federal contract opportunity')}. Award amount: ${award_amount:,.0f}",
+                    'agency_name': award.get('Awarding Agency', 'Unknown Agency'),
+                    'estimated_value': award_amount,
+                    'due_date': award.get('End Date'),
+                    'posted_date': award.get('Start Date'),
+                    'status': 'active',
+                    'source_type': 'federal_contract',
+                    'source_name': 'USASpending.gov',
+                    'total_score': 75,
+                    'opportunity_number': award.get('Award ID', 'N/A')
+                })
+            
+            return processed_opps
+        except Exception as e:
+            print(f"USASpending.gov API error: {str(e)}")
+            # Return empty list instead of failing
+            return []
+    
+    def fetch_usa_spending_opportunities_range(self, start_days_ago, end_days_ago):
+        """Fetch USASpending.gov opportunities for a specific date range"""
+        url = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
+        
+        start_date = (datetime.now() - timedelta(days=start_days_ago)).strftime("%Y-%m-%d")
+        end_date = (datetime.now() - timedelta(days=end_days_ago)).strftime("%Y-%m-%d")
+        
+        payload = {
+            "filters": {
+                "award_type_codes": ["A", "B", "C", "D"],  # Contract types
+                "time_period": [
+                    {
+                        "start_date": end_date,
+                        "end_date": start_date
+                    }
+                ]
+            },
+            "fields": [
+                "Award ID",
+                "Recipient Name", 
+                "Award Amount",
+                "Start Date",
+                "End Date",
+                "Awarding Agency",
+                "Award Description"
+            ],
+            "sort": "Start Date",
+            "order": "desc",
+            "limit": 100
+        }
+        
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "OpportunityDashboard/1.0"
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            results = data.get('results', [])
+            
+            # Transform data to match our schema
+            processed_opps = []
+            for i, award in enumerate(results):
+                award_amount = award.get('Award Amount', 0) or 0
+                processed_opps.append({
+                    'id': f"usa-{start_days_ago}-{award.get('Award ID', i)}",
+                    'title': f"Federal Contract - {award.get('Recipient Name', 'Contract Opportunity')}",
+                    'description': f"{award.get('Award Description', 'Federal contract opportunity')}. Award amount: ${award_amount:,.0f}",
+                    'agency_name': award.get('Awarding Agency', 'Unknown Agency'),
+                    'estimated_value': award_amount,
+                    'due_date': award.get('End Date'),
+                    'posted_date': award.get('Start Date'),
+                    'status': 'active',
+                    'source_type': 'federal_contract',
+                    'source_name': 'USASpending.gov',
+                    'total_score': 75,
+                    'opportunity_number': award.get('Award ID', 'N/A')
+                })
+            
+            return processed_opps
+        except Exception as e:
+            print(f"USASpending.gov API error for range {start_days_ago}-{end_days_ago}: {str(e)}")
+            return []
     
     def fetch_firecrawl_opportunities(self):
         """Fetch opportunities from Firecrawl web scraping sources"""
@@ -562,119 +796,82 @@ class handler(BaseHTTPRequestHandler):
             print("FIRECRAWL_API_KEY not found - skipping web scraping")
             return []
         
-        # Sample data for when Firecrawl is not configured
-        sample_scraped_data = [
-            {
-                'id': 'scraped-demo-1',
-                'title': 'California Digital Government Modernization Initiative',
-                'description': 'Comprehensive digital transformation project for state government services, including cloud migration, cybersecurity enhancements, and citizen portal development.',
-                    'estimated_value': 15000000,
-                    'due_date': '2025-08-30',
-                    'posted_date': '2025-06-01',
-                    'status': 'active',
-                    'source_type': 'state_rfp',
-                    'source_name': 'Firecrawl - California eProcure',
-                    'total_score': 85,
-                    'opportunity_number': 'CDT-2025-001'
+        # Real Firecrawl integration - scrape multiple RFP sources
+        try:
+            # Define high-value RFP sources to scrape
+            rfp_sources = [
+                {
+                    'url': 'https://www.fbo.gov/opportunities/',
+                    'name': 'FBO.gov',
+                    'type': 'federal_contract'
                 },
                 {
-                    'id': 'scraped-demo-2',
-                    'title': 'NASA Space Technology Research Partnership',
-                    'description': 'NASA seeks innovative research partnerships for next-generation space technology development, including propulsion systems, life support, and communication technologies.',
-                    'agency_name': 'NASA',
-                    'estimated_value': 50000000,
-                    'due_date': '2025-09-15',
-                    'posted_date': '2025-06-05',
-                    'status': 'active',
-                    'source_type': 'federal_direct',
-                    'source_name': 'Firecrawl - NASA SEWP',
-                    'total_score': 90,
-                    'opportunity_number': 'NASA-2025-TECH-001'
+                    'url': 'https://www.grants.gov/search-results.html',
+                    'name': 'Grants.gov',
+                    'type': 'federal_grant'
                 },
                 {
-                    'id': 'scraped-demo-3',
-                    'title': 'Enterprise Software Development Services',
-                    'description': 'Major corporation seeks software development services for custom enterprise applications, including web development, mobile apps, and system integrations.',
-                    'agency_name': 'Fortune 500 Corporation',
-                    'estimated_value': 8500000,
-                    'due_date': '2025-07-20',
-                    'posted_date': '2025-06-10',
-                    'status': 'active',
-                    'source_type': 'private_rfp',
-                    'source_name': 'Firecrawl - RFPMart',
-                    'total_score': 80,
-                    'opportunity_number': 'RFP-2025-SW-001'
+                    'url': 'https://www.gsa.gov/buy-through-us/purchasing-programs/multiple-award-schedules',
+                    'name': 'GSA Schedules',
+                    'type': 'federal_contract'
                 }
             ]
-        
-        # Import Firecrawl service
-        import sys
-        import os
-        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
-        
-        try:
-            from services.firecrawl_service import FirecrawlScrapeService
             
-            # Initialize Firecrawl service
-            firecrawl_service = FirecrawlScrapeService(firecrawl_api_key)
-            
-            # Get opportunities from top 3 sources to avoid rate limits
-            top_sources = ['california_procurement', 'nasa_procurement', 'rfpmart']
             scraped_opportunities = []
             
-            for source_key in top_sources:
+            for source in rfp_sources:
                 try:
-                    print(f"Scraping source: {source_key}")
-                    result = firecrawl_service.scrape_source(source_key)
+                    # Use Firecrawl to scrape and extract structured data
+                    headers = {
+                        'Authorization': f'Bearer {firecrawl_api_key}',
+                        'Content-Type': 'application/json'
+                    }
                     
-                    if result['success'] and result.get('opportunities'):
-                        # Convert scraped opportunities to our format
-                        for opp in result['opportunities']:
-                            converted_opp = {
-                                'id': f"scraped-{source_key}-{len(scraped_opportunities)}",
-                                'title': opp.get('title', 'Scraped Opportunity'),
-                                'description': opp.get('description', '')[:500],
-                                'agency_name': opp.get('agency_name', 'Unknown Agency'),
-                                'estimated_value': self.parse_value(opp.get('estimated_value')),
-                                'due_date': opp.get('due_date'),
-                                'posted_date': opp.get('posted_date'),
-                                'status': 'active',
-                                'source_type': result.get('source', 'scraped'),
-                                'source_name': f"Firecrawl - {result.get('source', source_key)}",
-                                'total_score': 75,  # Default score for scraped opportunities
-                                'opportunity_number': opp.get('opportunity_number', 'N/A')
-                            }
-                            scraped_opportunities.append(converted_opp)
+                    payload = {
+                        'url': source['url'],
+                        'extractorOptions': {
+                            'mode': 'llm-extraction',
+                            'extractionPrompt': 'Extract any RFPs, contracts, or procurement opportunities. For each, extract: title, description, agency, estimated value, due date, and opportunity number.'
+                        }
+                    }
+                    
+                    response = requests.post(
+                        'https://api.firecrawl.dev/v1/scrape',
+                        headers=headers,
+                        json=payload,
+                        timeout=60
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        extracted_data = data.get('data', {}).get('llm_extraction', {})
                         
-                        print(f"Added {len(result['opportunities'])} opportunities from {source_key}")
-                    else:
-                        print(f"No opportunities found from {source_key}")
-                        
+                        # Process extracted opportunities
+                        if extracted_data and 'opportunities' in extracted_data:
+                            for i, opp in enumerate(extracted_data['opportunities'][:100]):
+                                scraped_opportunities.append({
+                                    'id': f'scraped-{source["name"].lower()}-{i}',
+                                    'title': opp.get('title', 'Scraped Opportunity'),
+                                    'description': opp.get('description', 'Opportunity scraped from web source'),
+                                    'agency_name': opp.get('agency', source['name']),
+                                    'estimated_value': opp.get('estimated_value'),
+                                    'due_date': opp.get('due_date'),
+                                    'posted_date': datetime.now().strftime('%Y-%m-%d'),
+                                    'status': 'active',
+                                    'source_type': source['type'],
+                                    'source_name': f'Firecrawl - {source["name"]}',
+                                    'total_score': 70,
+                                    'opportunity_number': opp.get('opportunity_number', 'N/A')
+                                })
+                    
+                    print(f"Scraped {len(scraped_opportunities)} opportunities from {source['name']}")
+                    
                 except Exception as e:
-                    print(f"Failed to scrape {source_key}: {str(e)}")
+                    print(f"Error scraping {source['name']}: {str(e)}")
                     continue
             
-            return scraped_opportunities[:1000]  # Maximum scraping capacity
+            return scraped_opportunities[:500]  # Return up to 500 scraped opportunities
             
-        except ImportError:
-            print("Firecrawl service not available - returning sample scraped data")
-            # Return sample data when service is not available
-            return [
-                {
-                    'id': 'scraped-sample-1',
-                    'title': 'Web Scraping Demo - California RFP',
-                    'description': 'Sample scraped opportunity from California procurement website. In production, this would contain real scraped data from government procurement sites.',
-                    'agency_name': 'California Sample Agency',
-                    'estimated_value': 2500000,
-                    'due_date': '2025-08-15',
-                    'posted_date': '2025-06-12',
-                    'status': 'active',
-                    'source_type': 'scraped_demo',
-                    'source_name': 'Firecrawl Demo',
-                    'total_score': 75,
-                    'opportunity_number': 'SAMPLE-SCRAPED-001'
-                }
-            ]
         except Exception as e:
             print(f"Firecrawl integration error: {str(e)}")
             return []
@@ -695,50 +892,123 @@ class handler(BaseHTTPRequestHandler):
                 "Content-Type": "application/json"
             }
             
-            # Query for current federal and state RFPs
-            payload = {
-                "model": "llama-3.1-sonar-small-128k-online",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Find 10 current active federal or state government RFPs, contracts, or grant opportunities posted in the last 30 days. For each, provide: title, agency, estimated value, due date, and brief description. Format as JSON array."
-                    }
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.2
-            }
-            
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-            
-            # Parse the response and convert to our format
-            # For now, return sample data structure
-            discovered_opps = [
-                {
-                    'id': 'perplexity-1',
-                    'title': 'AI-Discovered Federal Technology Modernization RFP',
-                    'description': 'Recently discovered opportunity for federal technology modernization services, identified through AI-powered web monitoring.',
-                    'agency_name': 'Department of Technology',
-                    'estimated_value': 25000000,
-                    'due_date': '2025-08-15',
-                    'posted_date': '2025-06-15',
-                    'status': 'active',
-                    'source_type': 'ai_discovered',
-                    'source_name': 'Perplexity AI Discovery',
-                    'total_score': 88,
-                    'opportunity_number': 'AI-DISC-001'
-                }
+            # Query for current federal and state RFPs with multiple searches
+            queries = [
+                "Find current active federal government RFPs and contracts posted in the last 30 days. Include title, agency, estimated value, due date, and description.",
+                "Search for state government procurement opportunities and grants available now. Include title, agency, value, deadline, and description.",
+                "Find current NASA, DOD, DOE, or other federal agency contract opportunities and RFPs. Include title, agency, value, deadline.",
+                "Search for current federal and state infrastructure, technology, or healthcare RFPs and opportunities. Include details."
             ]
             
-            print(f"Perplexity AI discovered {len(discovered_opps)} opportunities")
-            return discovered_opps
+            discovered_opps = []
+            
+            for query in queries:
+                try:
+                    payload = {
+                        "model": "llama-3.1-sonar-small-128k-online",
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": query
+                            }
+                        ],
+                        "max_tokens": 4000,
+                        "temperature": 0.2
+                    }
+                    
+                    response = requests.post(url, json=payload, headers=headers, timeout=60)
+                    response.raise_for_status()
+                    
+                    data = response.json()
+                    content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    
+                    # Process the AI response to extract opportunities
+                    if content:
+                        # Split content into potential opportunities based on common patterns
+                        opportunity_blocks = content.split('\n\n')
+                        
+                        for i, block in enumerate(opportunity_blocks):
+                            if any(keyword in block.lower() for keyword in ['rfp', 'contract', 'grant', 'opportunity', 'procurement']):
+                                # Extract basic information using simple parsing
+                                lines = block.split('\n')
+                                title = lines[0].strip('*- ').strip() if lines else f"AI-Discovered Opportunity {len(discovered_opps)+1}"
+                                
+                                # Create opportunity from discovered content
+                                discovered_opps.append({
+                                    'id': f'perplexity-{len(discovered_opps)+1}',
+                                    'title': title[:100],  # Limit title length
+                                    'description': block[:500],  # First 500 chars as description
+                                    'agency_name': self.extract_agency_from_text(block),
+                                    'estimated_value': self.extract_value_from_text(block),
+                                    'due_date': self.extract_date_from_text(block),
+                                    'posted_date': datetime.now().strftime('%Y-%m-%d'),
+                                    'status': 'active',
+                                    'source_type': 'ai_discovered',
+                                    'source_name': 'Perplexity AI Discovery',
+                                    'total_score': 85,
+                                    'opportunity_number': f'AI-DISC-{len(discovered_opps)+1:03d}'
+                                })
+                    
+                    print(f"Processed {len(opportunity_blocks)} blocks from query, found {len(discovered_opps)} opportunities so far")
+                    
+                except Exception as e:
+                    print(f"Error processing Perplexity query: {str(e)}")
+                    continue
+            
+            print(f"Perplexity AI discovered {len(discovered_opps)} total opportunities")
+            return discovered_opps[:100]  # Limit to 100 AI-discovered opportunities
             
         except Exception as e:
             print(f"Perplexity AI discovery failed: {str(e)}")
             return []
+    
+    def extract_agency_from_text(self, text):
+        """Extract agency name from text"""
+        # Look for common agency patterns
+        import re
+        agencies = ['NASA', 'DOD', 'DOE', 'DHS', 'HHS', 'VA', 'EPA', 'GSA', 'USDA', 'Department', 'Agency']
+        for agency in agencies:
+            if agency.lower() in text.lower():
+                return agency
+        return 'Federal Agency'
+    
+    def extract_value_from_text(self, text):
+        """Extract monetary value from text"""
+        import re
+        # Look for dollar amounts
+        value_patterns = [
+            r'\$([0-9,]+(?:\.[0-9]+)?)\s*(million|billion)?',
+            r'([0-9,]+(?:\.[0-9]+)?)\s*(million|billion)?\s*dollars?'
+        ]
+        
+        for pattern in value_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                amount = float(match.group(1).replace(',', ''))
+                unit = match.group(2).lower() if match.group(2) else ''
+                if 'million' in unit:
+                    return amount * 1000000
+                elif 'billion' in unit:
+                    return amount * 1000000000
+                else:
+                    return amount
+        return None
+    
+    def extract_date_from_text(self, text):
+        """Extract date from text"""
+        import re
+        # Look for date patterns
+        date_patterns = [
+            r'(?:due|deadline|closes?|expires?)[:\s]+([A-Za-z]+ \d{1,2}, \d{4})',
+            r'(\d{1,2}/\d{1,2}/\d{4})',
+            r'(\d{4}-\d{2}-\d{2})'
+        ]
+        
+        for pattern in date_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        return None
     
     def parse_value(self, value_str):
         """Parse estimated value from string format"""
@@ -762,6 +1032,8 @@ class handler(BaseHTTPRequestHandler):
     
     def perform_real_sync(self):
         """Perform real API synchronization"""
+        global SYNC_STATUS_DATA
+        
         results = {
             'total_processed': 0,
             'total_added': 0,
@@ -769,6 +1041,8 @@ class handler(BaseHTTPRequestHandler):
             'sources': {},
             'errors': []
         }
+        
+        current_timestamp = datetime.now().isoformat()
         
         # Sync SAM.gov if API key is available
         sam_api_key = os.environ.get('SAM_API_KEY')
@@ -780,8 +1054,16 @@ class handler(BaseHTTPRequestHandler):
                     'records_processed': len(sam_opps),
                     'records_added': len(sam_opps),
                     'records_updated': 0,
-                    'last_sync': 'now'
+                    'last_sync': current_timestamp
                 }
+                # Update persistent status
+                SYNC_STATUS_DATA['sources']['sam_gov'].update({
+                    'status': 'completed',
+                    'last_sync': current_timestamp,
+                    'records_processed': len(sam_opps),
+                    'records_added': len(sam_opps),
+                    'records_updated': 0
+                })
                 results['total_processed'] += len(sam_opps)
                 results['total_added'] += len(sam_opps)
             except Exception as e:
@@ -792,6 +1074,14 @@ class handler(BaseHTTPRequestHandler):
                     'records_added': 0,
                     'records_updated': 0
                 }
+                # Update persistent status
+                SYNC_STATUS_DATA['sources']['sam_gov'].update({
+                    'status': 'failed',
+                    'last_sync': current_timestamp,  # Still update timestamp to show attempt
+                    'records_processed': 0,
+                    'records_added': 0,
+                    'records_updated': 0
+                })
                 results['errors'].append(f"SAM.gov sync failed: {str(e)}")
         else:
             results['sources']['sam_gov'] = {
@@ -801,6 +1091,9 @@ class handler(BaseHTTPRequestHandler):
                 'records_added': 0,
                 'records_updated': 0
             }
+            SYNC_STATUS_DATA['sources']['sam_gov'].update({
+                'status': 'no_api_key'
+            })
         
         # Sync Grants.gov (no API key required)
         try:
@@ -810,8 +1103,16 @@ class handler(BaseHTTPRequestHandler):
                 'records_processed': len(grants_opps),
                 'records_added': len(grants_opps),
                 'records_updated': 0,
-                'last_sync': 'now'
+                'last_sync': current_timestamp
             }
+            # Update persistent status
+            SYNC_STATUS_DATA['sources']['grants_gov'].update({
+                'status': 'completed',
+                'last_sync': current_timestamp,
+                'records_processed': len(grants_opps),
+                'records_added': len(grants_opps),
+                'records_updated': 0
+            })
             results['total_processed'] += len(grants_opps)
             results['total_added'] += len(grants_opps)
         except Exception as e:
@@ -822,6 +1123,14 @@ class handler(BaseHTTPRequestHandler):
                 'records_added': 0,
                 'records_updated': 0
             }
+            # Update persistent status
+            SYNC_STATUS_DATA['sources']['grants_gov'].update({
+                'status': 'failed',
+                'last_sync': current_timestamp,
+                'records_processed': 0,
+                'records_added': 0,
+                'records_updated': 0
+            })
             results['errors'].append(f"Grants.gov sync failed: {str(e)}")
         
         # Sync USASpending.gov (no API key required, 1000 req/hour)
@@ -832,8 +1141,16 @@ class handler(BaseHTTPRequestHandler):
                 'records_processed': len(usa_opps),
                 'records_added': len(usa_opps),
                 'records_updated': 0,
-                'last_sync': 'now'
+                'last_sync': current_timestamp
             }
+            # Update persistent status
+            SYNC_STATUS_DATA['sources']['usa_spending'].update({
+                'status': 'completed',
+                'last_sync': current_timestamp,
+                'records_processed': len(usa_opps),
+                'records_added': len(usa_opps),
+                'records_updated': 0
+            })
             results['total_processed'] += len(usa_opps)
             results['total_added'] += len(usa_opps)
         except Exception as e:
@@ -844,7 +1161,19 @@ class handler(BaseHTTPRequestHandler):
                 'records_added': 0,
                 'records_updated': 0
             }
+            # Update persistent status
+            SYNC_STATUS_DATA['sources']['usa_spending'].update({
+                'status': 'failed',
+                'last_sync': current_timestamp,
+                'records_processed': 0,
+                'records_added': 0,
+                'records_updated': 0
+            })
             results['errors'].append(f"USASpending.gov sync failed: {str(e)}")
+        
+        # Update global sync totals
+        SYNC_STATUS_DATA['last_sync_total_processed'] = results['total_processed']
+        SYNC_STATUS_DATA['last_sync_total_added'] = results['total_added']
         
         success = len(results['errors']) == 0 or results['total_added'] > 0
         message = f"Sync completed - {results['total_added']} opportunities fetched"
