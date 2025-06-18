@@ -124,7 +124,7 @@ export const formatCurrency = (amount) => {
 }
 
 export const formatDate = (dateString) => {
-  if (!dateString) return 'N/A'
+  if (!dateString || dateString === null) return 'Not yet synced'
   
   try {
     const date = new Date(dateString)
