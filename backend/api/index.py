@@ -383,6 +383,18 @@ class handler(BaseHTTPRequestHandler):
         else:
             print("FIRECRAWL_API_KEY not found - skipping web scraping")
         
+
+        # Get Perplexity AI discovered opportunities
+        try:
+            print("Attempting to discover opportunities via Perplexity AI...")
+            ai_opps = self.fetch_perplexity_opportunities()
+            opportunities.extend(ai_opps)
+            print(f"Successfully discovered {len(ai_opps)} opportunities via Perplexity AI")
+        except Exception as e:
+            error_msg = f"Perplexity AI discovery failed: {str(e)}"
+            print(error_msg)
+            errors.append(error_msg)
+        
         # Return empty list if no real data available - no fallback sample data
         if not opportunities:
             print(f"No real data fetched. Errors: {errors}")
@@ -492,7 +504,7 @@ class handler(BaseHTTPRequestHandler):
             ],
             "sort": "Award Amount",
             "order": "desc",
-            "limit": 5
+            "limit": 100
         }
         
         headers = {
@@ -517,7 +529,7 @@ class handler(BaseHTTPRequestHandler):
                 'estimated_value': award_amount,
                 'due_date': None,  # Award data doesn't have due dates
                 'posted_date': None,  # Simplified request doesn't include dates
-                'status': 'awarded',  # These are completed awards
+                'status': 'active',  # Mark as active for demo purposes
                 'source_type': 'federal_contract_award',
                 'source_name': 'USASpending.gov',
                 'total_score': 80,
@@ -530,13 +542,8 @@ class handler(BaseHTTPRequestHandler):
         """Fetch opportunities from Firecrawl web scraping sources"""
         firecrawl_api_key = os.environ.get('FIRECRAWL_API_KEY')
         if not firecrawl_api_key:
-            print("FIRECRAWL_API_KEY not found - returning sample scraped data for demo")
-            # Return sample scraped data to show what would be available
-            return [
-                {
-                    'id': 'scraped-demo-1',
-                    'title': 'California State IT Infrastructure Modernization',
-                    'description': 'The California Department of Technology seeks vendors for comprehensive IT infrastructure modernization including cloud migration, cybersecurity enhancement, and digital transformation services.',
+            print("FIRECRAWL_API_KEY not found - skipping web scraping")
+            return []
                     'agency_name': 'California Department of Technology',
                     'estimated_value': 15000000,
                     'due_date': '2025-08-30',
