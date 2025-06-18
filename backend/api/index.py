@@ -383,25 +383,10 @@ class handler(BaseHTTPRequestHandler):
         else:
             print("FIRECRAWL_API_KEY not found - skipping web scraping")
         
-        # If no real data available, return sample data with error info
+        # Return empty list if no real data available - no fallback sample data
         if not opportunities:
             print(f"No real data fetched. Errors: {errors}")
-            return [
-                {
-                    'id': 'sample-1',
-                    'title': 'Sample Federal Contract - No Real Data Available',
-                    'description': f'API fetch failed. SAM API Key: {"Present" if sam_api_key else "Missing"}. Errors: {"; ".join(errors) if errors else "Unknown"}',
-                    'agency_name': 'Sample Agency',
-                    'estimated_value': 1000000,
-                    'due_date': '2025-08-15',
-                    'posted_date': '2025-06-01',
-                    'status': 'active',
-                    'source_type': 'federal_contract',
-                    'source_name': 'Sample Data',
-                    'total_score': 75,
-                    'opportunity_number': 'SAMPLE-001'
-                }
-            ]
+            return []
         
         print(f"Returning {len(opportunities)} real opportunities")
         return opportunities
@@ -431,7 +416,7 @@ class handler(BaseHTTPRequestHandler):
         
         # Transform data
         processed_opps = []
-        for i, opp in enumerate(opportunities[:5]):  # Limit to 5 for performance
+        for i, opp in enumerate(opportunities[:100]):  # Increased limit for more data
             processed_opps.append({
                 'id': opp.get('noticeId', f'sam-{i}'),
                 'title': opp.get('title', 'No Title'),
@@ -472,7 +457,7 @@ class handler(BaseHTTPRequestHandler):
         
         # Transform data
         processed_opps = []
-        for i, opp in enumerate(opportunities[:5]):  # Limit to 5 for performance
+        for i, opp in enumerate(opportunities[:100]):  # Increased limit for more data
             processed_opps.append({
                 'id': opp.get('id', f'grants-{i}'),
                 'title': opp.get('title', 'No Title'),
@@ -522,7 +507,7 @@ class handler(BaseHTTPRequestHandler):
         
         # Transform data to match our schema
         processed_opps = []
-        for i, award in enumerate(results[:5]):  # Limit to 5 for performance
+        for i, award in enumerate(results[:100]):  # Increased limit for more data
             award_amount = award.get('Award Amount', 0)
             processed_opps.append({
                 'id': award.get('Award ID', f'usa-{i}'),
@@ -639,7 +624,7 @@ class handler(BaseHTTPRequestHandler):
                     print(f"Failed to scrape {source_key}: {str(e)}")
                     continue
             
-            return scraped_opportunities[:10]  # Limit to 10 scraped opportunities
+            return scraped_opportunities[:100]  # Increased limit for more data
             
         except ImportError:
             print("Firecrawl service not available - returning sample scraped data")

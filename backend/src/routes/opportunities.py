@@ -41,9 +41,9 @@ def get_opportunities():
         if source_type:
             query = query.filter(Opportunity.source_type == source_type)
         
-        # Remove status filter since our sample data doesn't have status column
-        # if status:
-        #     query = query.filter(Opportunity.status == status)
+        # Apply status filter for live data
+        if status and status != 'all':
+            query = query.filter(Opportunity.status == status)
         
         if min_score is not None:
             query = query.filter(Opportunity.total_score >= min_score)
