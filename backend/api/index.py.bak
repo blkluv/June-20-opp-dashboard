@@ -40,7 +40,7 @@ class handler(BaseHTTPRequestHandler):
         if path == '/' or path == '':
             response = {
                 'message': 'Opportunity Dashboard API',
-                'version': '1.0.2',
+                'version': '1.0.1',
                 'status': 'healthy',
                 'endpoints': [
                     '/api/health',
@@ -118,7 +118,7 @@ class handler(BaseHTTPRequestHandler):
                 'total': len(opportunities),
                 'message': message
             }
-        elif path == '/opportunities/stats':
+        elif path == '/api/opportunities/stats':
             # Calculate real stats from live opportunities data
             opportunities = self.get_real_opportunities()
             
@@ -148,7 +148,7 @@ class handler(BaseHTTPRequestHandler):
                 'by_type': by_type,
                 'by_agency': by_agency
             }
-        elif path == '/scraping/sources':
+        elif path == '/api/scraping/sources':
             # Get available Firecrawl scraping sources
             firecrawl_api_key = os.environ.get('FIRECRAWL_API_KEY')
             if not firecrawl_api_key:
@@ -294,13 +294,7 @@ class handler(BaseHTTPRequestHandler):
         
         path = self.path
         
-        # Normalize path for Vercel deployment
-        if path.startswith('/api'):
-            path = path[4:]  # Remove '/api' prefix
-        if not path:
-            path = '/'
-        
-        if path == '/sync':
+        if path == '/api/sync':
             # Perform real API sync
             sync_results = self.perform_real_sync()
             response = {
@@ -310,7 +304,7 @@ class handler(BaseHTTPRequestHandler):
                 'last_sync_total_added': sync_results.get('last_sync_total_added', 0),
                 'results': sync_results['results']
             }
-        elif path == '/scraping/test':
+        elif path == '/api/scraping/test':
             # Test Firecrawl service
             firecrawl_api_key = os.environ.get('FIRECRAWL_API_KEY')
             if not firecrawl_api_key:
