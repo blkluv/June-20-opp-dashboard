@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 50px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 Vercel is Working!</h1>
+        <p>If you can see this page, Vercel is serving files correctly.</p>
+        <p>The issue is likely with the React app build or configuration.</p>
+        <p id="time"></p>
+    </div>
+    <script>
+        document.getElementById('time').textContent = 'Current time: ' + new Date().toLocaleString();
+        console.log('✅ Simple test file loaded successfully at', new Date());
+    </script>
+</body>
+</html>

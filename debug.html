@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #ffe6e6; color: #d00; }
+        .success { background: #e6ffe6; color: #080; }
+        pre { background: #f0f0f0; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Dashboard API Debug Test</h1>
+    <p>This will test the exact same API calls your dashboard makes:</p>
+    
+    <button onclick="testDashboardAPIs()">Test Dashboard APIs</button>
+    <button onclick="clearResults()">Clear</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE = 'https://opportunity-dashboard-backend-jacobs-projects-cf4c7bdb.vercel.app/api';
+        
+        async function testDashboardAPIs() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="result">Testing dashboard APIs...</div>';
+            
+            try {
+                // Test the exact same API calls the dashboard makes
+                console.log('Testing API calls...');
+                
+                // 1. Test opportunities
+                console.log('1. Testing /api/opportunities');
+                const opportunitiesResponse = await fetch(`${API_BASE}/opportunities`);
+                console.log('Opportunities response status:', opportunitiesResponse.status);
+                const opportunitiesData = await opportunitiesResponse.json();
+                console.log('Opportunities data:', opportunitiesData);
+                
+                // 2. Test stats
+                console.log('2. Testing /api/opportunities/stats');
+                const statsResponse = await fetch(`${API_BASE}/opportunities/stats`);
+                console.log('Stats response status:', statsResponse.status);
+                const statsData = await statsResponse.json();
+                console.log('Stats data:', statsData);
+                
+                // 3. Test sync status
+                console.log('3. Testing /api/sync/status');
+                const syncResponse = await fetch(`${API_BASE}/sync/status`);
+                console.log('Sync response status:', syncResponse.status);
+                const syncData = await syncResponse.json();
+                console.log('Sync data:', syncData);
+                
+                // Display results
+                let html = `<div class="result success">
+                    <h3>✅ All API Tests Successful!</h3>
+                    <h4>1. Opportunities (${opportunitiesData.total} found):</h4>
+                    <pre>${JSON.stringify(opportunitiesData.opportunities[0], null, 2)}</pre>
+                    
+                    <h4>2. Stats:</h4>
+                    <pre>${JSON.stringify(statsData, null, 2)}</pre>
+                    
+                    <h4>3. Sync Status:</h4>
+                    <pre>${JSON.stringify(syncData, null, 2)}</pre>
+                </div>`;
+                
+                resultsDiv.innerHTML = html;
+                
+            } catch (error) {
+                console.error('API test failed:', error);
+                resultsDiv.innerHTML = `<div class="result error">
+                    <h3>❌ API Test Failed</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Check browser console for details</strong></p>
+                </div>`;
+            }
+        }
+        
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        // Show environment info
+        window.onload = () => {
+            console.log('API Base URL:', API_BASE);
+            console.log('User Agent:', navigator.userAgent);
+            console.log('Current URL:', window.location.href);
+        };
+    </script>
+</body>
+</html>

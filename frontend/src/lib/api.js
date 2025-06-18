@@ -1,5 +1,5 @@
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://opportunity-dashboard-backend.vercel.app/api'
 
 // API client class
 class ApiClient {
@@ -15,18 +15,23 @@ class ApiClient {
         'Content-Type': 'application/json',
         ...options.headers,
       },
+      signal: AbortSignal.timeout(30000), // 30 second timeout
       ...options,
     }
 
     try {
+      console.log(`Making API request to: ${url}`)
       const response = await fetch(url, config)
+      console.log(`API response for ${endpoint}:`, response.status, response.statusText)
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
-      return await response.json()
+      const data = await response.json()
+      console.log(`API data for ${endpoint}:`, data)
+      return data
     } catch (error) {
       console.error(`API request failed: ${endpoint}`, error)
       throw error

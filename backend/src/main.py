@@ -9,6 +9,7 @@ from src.models.opportunity import db
 from src.routes.user import user_bp
 from src.routes.opportunities import opportunities_bp
 from src.routes.scraping import scraping_bp
+from src.routes.rfp_enhanced import rfp_enhanced_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
@@ -20,10 +21,20 @@ CORS(app)
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(opportunities_bp, url_prefix='/api')
 app.register_blueprint(scraping_bp, url_prefix='/api')
+app.register_blueprint(rfp_enhanced_bp, url_prefix='/api')
 
-# Enable database - use SQLite for development
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///opportunities.db'
+# Database configuration - support both PostgreSQL (Supabase) and SQLite
+database_url = os.getenv('DATABASE_URL', 'sqlite:///opportunities.db')
+
+# Handle different database URLs
+if database_url.startswith('postgres://'):
+    # Convert postgres:// to postgresql:// for SQLAlchemy 2.0+
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize database
 db.init_app(app)
 with app.app_context():
     db.create_all()
@@ -46,4 +57,4 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)
