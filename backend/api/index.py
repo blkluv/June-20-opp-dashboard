@@ -29,7 +29,7 @@ class handler(BaseHTTPRequestHandler):
         if path == '/' or path == '/api' or path == '/api/':
             response = {
                 'message': 'Opportunity Dashboard API',
-                'version': '1.0.0',
+                'version': '1.0.1',
                 'status': 'healthy',
                 'endpoints': [
                     '/api/health',
