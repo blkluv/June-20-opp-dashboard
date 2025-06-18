@@ -6,6 +6,10 @@ import Dashboard from '@/components/Dashboard'
 import OpportunityList from '@/components/OpportunityList'
 import OpportunityDetail from '@/components/OpportunityDetail'
 import PerplexityPage from '@/components/PerplexityPage'
+import IntelligencePage from '@/components/IntelligencePage'
+import AnalyticsPage from '@/components/AnalyticsPage'
+import MarketIntelligencePage from '@/components/MarketIntelligencePage'
+import SmartMatchingPage from '@/components/SmartMatchingPage'
 import SettingsPage from '@/components/SettingsPage'
 import SyncStatus from '@/components/SyncStatus'
 import './App.css'
@@ -54,6 +58,10 @@ function App() {
                 <Route path="/opportunities" element={<OpportunityList />} />
                 <Route path="/opportunities/:id" element={<OpportunityDetail />} />
                 <Route path="/perplexity" element={<PerplexityPage />} />
+                <Route path="/intelligence" element={<IntelligencePage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="/market" element={<MarketIntelligencePage />} />
+                <Route path="/matching" element={<SmartMatchingPage />} />
                 <Route path="/sync" element={<SyncStatus />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>

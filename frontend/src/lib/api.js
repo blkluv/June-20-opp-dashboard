@@ -1,5 +1,5 @@
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-7bpp0k34x-jacobs-projects-cf4c7bdb.vercel.app/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-hfn9e3b3g-jacobs-projects-cf4c7bdb.vercel.app/api'
 
 // API client class
 class ApiClient {
@@ -60,6 +60,25 @@ class ApiClient {
     return this.request('/perplexity/discover', {
       method: 'POST',
       body: JSON.stringify(discoveryData),
+    })
+  }
+
+  async getDailyIntelligence() {
+    return this.request('/intelligence/daily')
+  }
+
+  async getPredictiveAnalytics() {
+    return this.request('/analytics/predictive')
+  }
+
+  async getMarketIntelligence() {
+    return this.request('/market/intelligence')
+  }
+
+  async getSmartMatches(preferences = {}) {
+    return this.request('/matching/smart', {
+      method: 'POST',
+      body: JSON.stringify(preferences)
     })
   }
 

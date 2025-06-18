@@ -11,7 +11,11 @@ import {
   Sun,
   Target,
   TrendingUp,
-  Brain
+  Brain,
+  BarChart3,
+  Zap,
+  Globe,
+  Crosshair
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -20,6 +24,10 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Opportunities', href: '/opportunities', icon: FileText },
   { name: 'AI Discovery', href: '/perplexity', icon: Brain },
+  { name: 'Intelligence', href: '/intelligence', icon: BarChart3 },
+  { name: 'Analytics Lab', href: '/analytics', icon: Zap },
+  { name: 'Market Intel', href: '/market', icon: Globe },
+  { name: 'Smart Match', href: '/matching', icon: Crosshair },
   { name: 'Sync Status', href: '/sync', icon: RefreshCw },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
