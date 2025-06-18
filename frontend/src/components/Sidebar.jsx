@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom'
 import { 
   Home, 
   FileText, 
-  Search, 
   Settings, 
   RefreshCw, 
   Menu, 
@@ -19,7 +18,6 @@ import { cn } from '@/lib/utils'
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Opportunities', href: '/opportunities', icon: FileText },
-  { name: 'Search', href: '/search', icon: Search },
   { name: 'Sync Status', href: '/sync', icon: RefreshCw },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
