@@ -17,6 +17,17 @@ class handler(BaseHTTPRequestHandler):
         # Parse the URL path
         path = self.path
         
+        # Debug: Log the actual path received
+        print(f"DEBUG: Received path: '{path}'")
+        
+        # Normalize path for Vercel deployment
+        if path.startswith('/api'):
+            path = path[4:]  # Remove '/api' prefix
+        if not path:
+            path = '/'
+        
+        print(f"DEBUG: Normalized path: '{path}'")
+        
         # Set CORS headers
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
@@ -26,7 +37,7 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         
         # Route handling
-        if path == '/' or path == '/api' or path == '/api/':
+        if path == '/' or path == '':
             response = {
                 'message': 'Opportunity Dashboard API',
                 'version': '1.0.1',
@@ -41,13 +52,13 @@ class handler(BaseHTTPRequestHandler):
                     '/api/scraping/test'
                 ]
             }
-        elif path == '/api/health':
+        elif path == '/health':
             response = {
                 'status': 'healthy',
                 'service': 'opportunity-dashboard-backend',
                 'message': 'Backend API is working correctly'
             }
-        elif path == '/api/sync/status':
+        elif path == '/sync/status':
             # Check if SAM API key is actually available
             sam_api_key = os.environ.get('SAM_API_KEY')
             sam_status = 'available' if sam_api_key else 'requires_api_key'
@@ -92,7 +103,7 @@ class handler(BaseHTTPRequestHandler):
                 'total_opportunities': 3,
                 'message': f'3 data sources configured - SAM.gov API key: {"configured" if sam_api_key else "missing"}. Rate limits: Grants.gov (1000/hr), SAM.gov (450/hr), USASpending.gov (1000/hr)'
             }
-        elif path == '/api/opportunities':
+        elif path == '/opportunities':
             # Get real opportunities from API sources
             opportunities = self.get_real_opportunities()
             
@@ -107,7 +118,7 @@ class handler(BaseHTTPRequestHandler):
                 'total': len(opportunities),
                 'message': message
             }
-        elif path == '/api/opportunities/stats':
+        elif path == '/opportunities/stats':
             # Calculate real stats from live opportunities data
             opportunities = self.get_real_opportunities()
             
@@ -137,7 +148,7 @@ class handler(BaseHTTPRequestHandler):
                 'by_type': by_type,
                 'by_agency': by_agency
             }
-        elif path == '/api/scraping/sources':
+        elif path == '/scraping/sources':
             # Get available Firecrawl scraping sources
             firecrawl_api_key = os.environ.get('FIRECRAWL_API_KEY')
             if not firecrawl_api_key:
@@ -283,7 +294,13 @@ class handler(BaseHTTPRequestHandler):
         
         path = self.path
         
-        if path == '/api/sync':
+        # Normalize path for Vercel deployment
+        if path.startswith('/api'):
+            path = path[4:]  # Remove '/api' prefix
+        if not path:
+            path = '/'
+        
+        if path == '/sync':
             # Perform real API sync
             sync_results = self.perform_real_sync()
             response = {
@@ -293,7 +310,7 @@ class handler(BaseHTTPRequestHandler):
                 'last_sync_total_added': sync_results.get('last_sync_total_added', 0),
                 'results': sync_results['results']
             }
-        elif path == '/api/scraping/test':
+        elif path == '/scraping/test':
             # Test Firecrawl service
             firecrawl_api_key = os.environ.get('FIRECRAWL_API_KEY')
             if not firecrawl_api_key:
