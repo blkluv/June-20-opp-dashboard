@@ -1,0 +1,41 @@
+# Enhanced Opportunity Dashboard Backend Requirements
+# Includes Supabase integration, background jobs, and advanced features
+
+# Core dependencies
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Supabase and PostgreSQL
+supabase>=1.0.4
+psycopg2-binary>=2.9.7
+postgrest>=0.10.8
+
+# Async and background processing
+asyncio
+threading
+
+# Data processing
+pandas>=2.0.3
+numpy>=1.24.0
+
+# Date/time handling
+python-dateutil>=2.8.2
+
+# Logging and monitoring
+structlog>=23.1.0
+
+# Web scraping (optional but recommended)
+beautifulsoup4>=4.12.2
+lxml>=4.9.3
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.1
+
+# Development tools
+black>=23.7.0
+flake8>=6.0.0
+
+# Production server (optional)
+gunicorn>=21.2.0
+uvicorn>=0.23.2

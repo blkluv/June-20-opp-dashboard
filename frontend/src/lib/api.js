@@ -1,5 +1,5 @@
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-77aounow9-jacobs-projects-cf4c7bdb.vercel.app/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-7bpp0k34x-jacobs-projects-cf4c7bdb.vercel.app/api'
 
 // API client class
 class ApiClient {
@@ -53,6 +53,13 @@ class ApiClient {
     return this.request('/opportunities/search', {
       method: 'POST',
       body: JSON.stringify(searchData),
+    })
+  }
+
+  async discoverOpportunities(discoveryData) {
+    return this.request('/perplexity/discover', {
+      method: 'POST',
+      body: JSON.stringify(discoveryData),
     })
   }
 

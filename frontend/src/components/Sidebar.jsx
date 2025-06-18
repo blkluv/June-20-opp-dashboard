@@ -10,7 +10,8 @@ import {
   Moon,
   Sun,
   Target,
-  TrendingUp
+  TrendingUp,
+  Brain
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -18,6 +19,7 @@ import { cn } from '@/lib/utils'
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Opportunities', href: '/opportunities', icon: FileText },
+  { name: 'AI Discovery', href: '/perplexity', icon: Brain },
   { name: 'Sync Status', href: '/sync', icon: RefreshCw },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]

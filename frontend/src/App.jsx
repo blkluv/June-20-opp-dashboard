@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar'
 import Dashboard from '@/components/Dashboard'
 import OpportunityList from '@/components/OpportunityList'
 import OpportunityDetail from '@/components/OpportunityDetail'
+import PerplexityPage from '@/components/PerplexityPage'
 import SettingsPage from '@/components/SettingsPage'
 import SyncStatus from '@/components/SyncStatus'
 import './App.css'
@@ -52,6 +53,7 @@ function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/opportunities" element={<OpportunityList />} />
                 <Route path="/opportunities/:id" element={<OpportunityDetail />} />
+                <Route path="/perplexity" element={<PerplexityPage />} />
                 <Route path="/sync" element={<SyncStatus />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>
