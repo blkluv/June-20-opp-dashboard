@@ -67,8 +67,8 @@ class FirecrawlScraper:
         """Scrape Grants.gov for opportunities"""
         print("🏛️ Scraping Grants.gov...")
         
-        # Grants.gov search URL for recent opportunities
-        url = "https://www.grants.gov/web/grants/search-grants.html"
+        # Use Grants.gov API instead of scraping HTML
+        url = "https://api.grants.gov/v2/api/search"
         
         # Schema to extract grant information
         extract_schema = {
