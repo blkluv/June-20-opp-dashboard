@@ -1,5 +1,5 @@
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-bn42qj3a9-jacobs-projects-cf4c7bdb.vercel.app/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-coral-kappa-45.vercel.app/api'
 
 // API client class
 class ApiClient {
