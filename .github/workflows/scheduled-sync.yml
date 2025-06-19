@@ -1,0 +1,106 @@
+name: Scheduled Opportunity Data Sync
+
+on:
+  schedule:
+    # Run every 30 minutes during business hours (9 AM - 6 PM UTC)
+    - cron: '0,30 9-18 * * 1-5'
+    # Run every 2 hours on weekends
+    - cron: '0 */2 * * 0,6'
+    # Daily cleanup at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  sync-data:
+    runs-on: ubuntu-latest
+    if: github.event.schedule != '0 2 * * *' # Don't run sync during cleanup time
+    steps:
+      - name: Trigger Intelligent Data Sync
+        run: |
+          response=$(curl -s -w "%{http_code}" -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://backend-6i3jb9rfr-jacobs-projects-cf4c7bdb.vercel.app/api/cron/sync-all")
+          
+          http_code="${response: -3}"
+          body="${response%???}"
+          
+          echo "HTTP Status: $http_code"
+          echo "Response: $body"
+          
+          if [ "$http_code" != "200" ]; then
+            echo "Sync failed with status $http_code"
+            exit 1
+          fi
+          
+          # Parse response to check sync status
+          status=$(echo "$body" | jq -r '.status // "unknown"')
+          if [ "$status" = "error" ]; then
+            echo "Sync completed with errors"
+            echo "$body" | jq '.error // "Unknown error"'
+            exit 1
+          elif [ "$status" = "completed" ]; then
+            echo "Sync completed successfully"
+            echo "$body" | jq '.total_processed // 0' | xargs echo "Records processed:"
+            echo "$body" | jq '.total_added // 0' | xargs echo "Records added:"
+          else
+            echo "Sync status: $status"
+          fi
+
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 2 * * *' # Only run cleanup at 2 AM
+    steps:
+      - name: Trigger Database Cleanup
+        run: |
+          response=$(curl -s -w "%{http_code}" -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://backend-6i3jb9rfr-jacobs-projects-cf4c7bdb.vercel.app/api/cron/cleanup")
+          
+          http_code="${response: -3}"
+          body="${response%???}"
+          
+          echo "HTTP Status: $http_code"
+          echo "Response: $body"
+          
+          if [ "$http_code" != "200" ]; then
+            echo "Cleanup failed with status $http_code"
+            exit 1
+          fi
+          
+          # Parse response to check cleanup status
+          status=$(echo "$body" | jq -r '.status // "unknown"')
+          if [ "$status" = "error" ]; then
+            echo "Cleanup completed with errors"
+            echo "$body" | jq '.error // "Unknown error"'
+            exit 1
+          elif [ "$status" = "completed" ]; then
+            echo "Cleanup completed successfully"
+            echo "$body" | jq '.opportunities_deleted // 0' | xargs echo "Opportunities deleted:"
+            echo "$body" | jq '.logs_deleted // 0' | xargs echo "Logs deleted:"
+          else
+            echo "Cleanup status: $status"
+          fi
+
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Cron Service Health
+        run: |
+          response=$(curl -s -w "%{http_code}" -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://backend-6i3jb9rfr-jacobs-projects-cf4c7bdb.vercel.app/api/cron/health")
+          
+          http_code="${response: -3}"
+          body="${response%???}"
+          
+          echo "HTTP Status: $http_code"
+          echo "Response: $body"
+          
+          if [ "$http_code" != "200" ]; then
+            echo "Health check failed with status $http_code"
+            exit 1
+          fi
+          
+          # Check if enhanced services are available
+          enhanced=$(echo "$body" | jq -r '.enhanced_services // false')
+          echo "Enhanced services available: $enhanced"
