@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Brain, Sparkles, Search, Filter, Zap, TrendingUp, Target, Calendar } from 'lucide-react'
+import { Brain, Sparkles, Search, Filter, Zap, TrendingUp, Target, Calendar, Globe, Database } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +23,11 @@ export default function PerplexityPage() {
   const [loading, setLoading] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const [stats, setStats] = useState(null)
+  const [advancedScraping, setAdvancedScraping] = useState({
+    loading: false,
+    results: null,
+    hasRun: false
+  })
   const { toast } = useToast()
 
   const handleInputChange = (field, value) => {
@@ -84,6 +89,41 @@ export default function PerplexityPage() {
     setResults([])
     setStats(null)
     setHasSearched(false)
+  }
+
+  const handleAdvancedScraping = async () => {
+    setAdvancedScraping(prev => ({ ...prev, loading: true }))
+    
+    try {
+      console.log('🚀 Starting advanced web scraping...')
+      const response = await apiClient.runAdvancedScraping()
+      
+      console.log('Advanced scraping response:', response)
+      
+      setAdvancedScraping({
+        loading: false,
+        results: response,
+        hasRun: true
+      })
+      
+      toast({
+        title: "Advanced Scraping Complete",
+        description: `Successfully scraped ${response.sources_scraped || 0} sources and found ${response.total_opportunities || 0} opportunities`,
+      })
+    } catch (error) {
+      console.error('Advanced scraping failed:', error)
+      setAdvancedScraping({
+        loading: false,
+        results: { error: error.message },
+        hasRun: true
+      })
+      
+      toast({
+        title: "Scraping Failed",
+        description: error.message || "Failed to run advanced scraping",
+        variant: "destructive",
+      })
+    }
   }
 
   const predefinedQueries = [
@@ -455,6 +495,124 @@ export default function PerplexityPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Advanced Web Scraping Section */}
+      <Card className="border-dashed border-2 border-blue-200 dark:border-blue-800">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Globe className="w-5 h-5 mr-2 text-blue-500" />
+            Advanced Web Scraping
+            <Badge variant="outline" className="ml-2 text-xs">BETA</Badge>
+          </CardTitle>
+          <CardDescription>
+            Scrape 100+ RFP sources including all 50 states, major cities, Fortune 500 companies, and international organizations
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg">
+              <div className="flex items-center space-x-2 mb-2">
+                <Database className="w-4 h-4 text-blue-500" />
+                <span className="font-medium text-sm">Source Coverage</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
+                <div>• All 50 state governments</div>
+                <div>• Top 10 major cities</div>
+                <div>• Fortune 500 companies</div>
+                <div>• International organizations</div>
+                <div>• University systems</div>
+                <div>• Industry platforms</div>
+                <div>• Nonprofit foundations</div>
+                <div>• RFP marketplaces</div>
+              </div>
+            </div>
+
+            <Button 
+              onClick={handleAdvancedScraping} 
+              disabled={advancedScraping.loading}
+              className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
+            >
+              <Globe className="w-4 h-4 mr-2" />
+              {advancedScraping.loading ? 'Scraping in Progress...' : 'Run Advanced Web Scraping'}
+            </Button>
+
+            {advancedScraping.loading && (
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2 text-sm">
+                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Scraping high-priority sources...</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  This may take 2-3 minutes as we respect rate limits and scrape responsibly
+                </div>
+              </div>
+            )}
+
+            {advancedScraping.hasRun && (
+              <Card className="mt-4">
+                <CardHeader>
+                  <CardTitle className="text-lg">Scraping Results</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {advancedScraping.results?.error ? (
+                    <div className="text-red-600 dark:text-red-400">
+                      <strong>Error:</strong> {advancedScraping.results.error}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                            {advancedScraping.results?.sources_scraped || 0}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Sources Scraped</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                            {advancedScraping.results?.total_opportunities || 0}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Opportunities Found</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                            {advancedScraping.results?.success_rate || 0}%
+                          </div>
+                          <div className="text-xs text-muted-foreground">Success Rate</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                            {advancedScraping.results?.high_priority || 0}
+                          </div>
+                          <div className="text-xs text-muted-foreground">High Priority</div>
+                        </div>
+                      </div>
+                      
+                      {advancedScraping.results?.sample_opportunities && (
+                        <div className="mt-4">
+                          <h4 className="font-medium mb-2">Sample Opportunities</h4>
+                          <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {advancedScraping.results.sample_opportunities.slice(0, 5).map((opp, index) => (
+                              <div key={index} className="p-3 border rounded-lg">
+                                <div className="font-medium text-sm">{opp.title}</div>
+                                <div className="text-xs text-muted-foreground">{opp.source_name}</div>
+                                {opp.estimated_value && (
+                                  <div className="text-xs text-green-600 dark:text-green-400">
+                                    Value: {formatCurrency(opp.estimated_value)}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
+import ErrorBoundary, { PageErrorFallback } from '@/components/ErrorBoundary'
 import Sidebar from '@/components/Sidebar'
 import Dashboard from '@/components/Dashboard'
 import OpportunityList from '@/components/OpportunityList'
@@ -41,40 +42,46 @@ function App() {
   }
 
   return (
-    <Router>
-      <div className={`min-h-screen bg-background text-foreground ${darkMode ? 'dark' : ''}`}>
-        <div className="flex">
-          <Sidebar 
-            isOpen={sidebarOpen} 
-            onToggle={() => setSidebarOpen(!sidebarOpen)}
-            darkMode={darkMode}
-            onToggleDarkMode={toggleDarkMode}
-          />
+    <ErrorBoundary>
+      <Router>
+        <div className={`min-h-screen bg-background text-foreground ${darkMode ? 'dark' : ''}`}>
+          <div className="flex">
+            <ErrorBoundary fallback={PageErrorFallback}>
+              <Sidebar 
+                isOpen={sidebarOpen} 
+                onToggle={() => setSidebarOpen(!sidebarOpen)}
+                darkMode={darkMode}
+                onToggleDarkMode={toggleDarkMode}
+              />
+            </ErrorBoundary>
+            
+            <main className={`flex-1 transition-all duration-300 ${
+              sidebarOpen ? 'ml-64' : 'ml-16'
+            }`}>
+              <div className="p-6">
+                <ErrorBoundary fallback={PageErrorFallback}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/personalized" element={<PersonalizedDashboard />} />
+                    <Route path="/opportunities" element={<OpportunityList />} />
+                    <Route path="/opportunities/:id" element={<OpportunityDetail />} />
+                    <Route path="/perplexity" element={<PerplexityPage />} />
+                    <Route path="/intelligence" element={<IntelligencePage />} />
+                    <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/market" element={<MarketIntelligencePage />} />
+                    <Route path="/matching" element={<SmartMatchingPage />} />
+                    <Route path="/sync" element={<SyncStatus />} />
+                    <Route path="/settings" element={<UserSettingsPage />} />
+                  </Routes>
+                </ErrorBoundary>
+              </div>
+            </main>
+          </div>
           
-          <main className={`flex-1 transition-all duration-300 ${
-            sidebarOpen ? 'ml-64' : 'ml-16'
-          }`}>
-            <div className="p-6">
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/personalized" element={<PersonalizedDashboard />} />
-                <Route path="/opportunities" element={<OpportunityList />} />
-                <Route path="/opportunities/:id" element={<OpportunityDetail />} />
-                <Route path="/perplexity" element={<PerplexityPage />} />
-                <Route path="/intelligence" element={<IntelligencePage />} />
-                <Route path="/analytics" element={<AnalyticsPage />} />
-                <Route path="/market" element={<MarketIntelligencePage />} />
-                <Route path="/matching" element={<SmartMatchingPage />} />
-                <Route path="/sync" element={<SyncStatus />} />
-                <Route path="/settings" element={<UserSettingsPage />} />
-              </Routes>
-            </div>
-          </main>
+          <Toaster />
         </div>
-        
-        <Toaster />
-      </div>
-    </Router>
+      </Router>
+    </ErrorBoundary>
   )
 }
 

@@ -129,6 +129,10 @@ class ApiClient {
       body: JSON.stringify({ url }),
     })
   }
+
+  async runAdvancedScraping() {
+    return this.request('/scraping/advanced')
+  }
 }
 
 // Create and export API client instance
