@@ -1,6 +1,7 @@
 // A/B Testing & Feature Experimentation Framework
 // Production-ready experimentation system with statistical rigor
 
+import React from 'react'
 import { monitoring } from './monitoring'
 
 class ExperimentManager {
@@ -524,5 +525,3 @@ const experimentManager = new ExperimentManager()
 export { experimentManager }
 export default ExperimentManager
 
-// Helper to import React for hooks
-const React = await import('react')

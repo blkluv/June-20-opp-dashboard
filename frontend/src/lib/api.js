@@ -1,4 +1,5 @@
 import { monitoring } from './monitoring'
+import { analyticsManager } from './analytics'
 
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-fev91zedw-jacobs-projects-cf4c7bdb.vercel.app/api'
@@ -45,6 +46,13 @@ class ApiClient {
       // Capture successful API call
       monitoring.captureApiCall(endpoint, method, duration, 'success')
       
+      // Track API success in analytics
+      analyticsManager.performanceMetric('api_response_time', duration, {
+        endpoint,
+        method,
+        status: 'success'
+      })
+      
       console.log(`API data for ${endpoint}:`, data)
       return data
     } catch (error) {
@@ -52,6 +60,11 @@ class ApiClient {
       
       // Capture error details
       monitoring.captureApiCall(endpoint, method, duration, 'error', error)
+      
+      // Track API error in analytics
+      analyticsManager.trackError(error, {
+        api: { endpoint, method, duration, status: 'error' }
+      })
       
       console.error(`API request failed: ${endpoint}`, error)
       throw error
@@ -61,25 +74,65 @@ class ApiClient {
   // Opportunities endpoints
   async getOpportunities(params = {}) {
     const queryString = new URLSearchParams(params).toString()
-    return this.request(`/opportunities${queryString ? `?${queryString}` : ''}`)
+    const result = await this.request(`/opportunities${queryString ? `?${queryString}` : ''}`)
+    
+    // Track opportunity listing view
+    analyticsManager.track('opportunities_listed', {
+      filter_count: Object.keys(params).length,
+      result_count: result?.opportunities?.length || 0
+    })
+    
+    return result
   }
 
   async getOpportunity(id) {
-    return this.request(`/opportunities/${id}`)
+    const result = await this.request(`/opportunities/${id}`)
+    
+    // Track individual opportunity view
+    analyticsManager.opportunityViewed(id, {
+      source_type: result?.source_type,
+      estimated_value: result?.estimated_value,
+      score: result?.total_score
+    })
+    
+    return result
   }
 
   async searchOpportunities(searchData) {
-    return this.request('/opportunities/search', {
+    const result = await this.request('/opportunities/search', {
       method: 'POST',
       body: JSON.stringify(searchData),
     })
+    
+    // Track search performed
+    analyticsManager.searchPerformed(
+      searchData.query || '',
+      searchData.filters || {},
+      result?.opportunities?.length || 0
+    )
+    
+    return result
   }
 
   async discoverOpportunities(discoveryData) {
-    return this.request('/perplexity/discover', {
+    // Track AI query start
+    analyticsManager.aiQueryStarted('perplexity_discovery', discoveryData.keywords || '')
+    
+    const startTime = performance.now()
+    const result = await this.request('/perplexity/discover', {
       method: 'POST',
       body: JSON.stringify(discoveryData),
     })
+    const duration = (performance.now() - startTime) / 1000
+    
+    // Track AI query completion
+    analyticsManager.aiQueryCompleted(
+      'perplexity_discovery', 
+      result?.opportunities?.length || 0,
+      duration
+    )
+    
+    return result
   }
 
   async getDailyIntelligence() {
@@ -150,7 +203,21 @@ class ApiClient {
   }
 
   async runAdvancedScraping() {
-    return this.request('/scraping/advanced')
+    // Track scraping start
+    analyticsManager.scrapingStarted('advanced_scraping', 100) // High priority sources
+    
+    const startTime = performance.now()
+    const result = await this.request('/scraping/advanced')
+    const duration = (performance.now() - startTime) / 1000
+    
+    // Track scraping completion
+    analyticsManager.scrapingCompleted(
+      'advanced_scraping',
+      result?.total_opportunities || 0,
+      duration
+    )
+    
+    return result
   }
 }
 

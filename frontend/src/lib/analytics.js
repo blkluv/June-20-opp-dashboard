@@ -1,6 +1,7 @@
 // Advanced Analytics & User Tracking System
 // Comprehensive user behavior tracking with privacy-first approach
 
+import React from 'react'
 import { monitoring } from './monitoring'
 import { experimentManager } from './experiments'
 
@@ -647,5 +648,3 @@ const analyticsManager = new AnalyticsManager()
 export { analyticsManager }
 export default AnalyticsManager
 
-// Helper to import React for hooks
-const React = await import('react')

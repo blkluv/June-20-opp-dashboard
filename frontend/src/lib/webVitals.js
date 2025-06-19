@@ -1,6 +1,7 @@
 // Advanced Web Vitals Monitoring
 // Comprehensive performance tracking for Core Web Vitals and custom metrics
 
+import React from 'react'
 import { monitoring } from './monitoring'
 
 class WebVitalsMonitor {
@@ -484,5 +485,3 @@ const globalWebVitalsMonitor = new WebVitalsMonitor()
 export { globalWebVitalsMonitor as webVitalsMonitor }
 export default WebVitalsMonitor
 
-// Helper to import React for hooks
-const React = await import('react')

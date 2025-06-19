@@ -19,14 +19,13 @@ import {
   Filter,
   RefreshCw
 } from 'lucide-react'
-import { ApiClient } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 export default function PersonalizedDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState(null)
-  const apiClient = new ApiClient()
 
   useEffect(() => {
     loadPersonalizedData()

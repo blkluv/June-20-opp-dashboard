@@ -16,7 +16,8 @@ import {
   Zap,
   Globe,
   Crosshair,
-  Database
+  Database,
+  Activity
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,7 @@ const navigation = [
   { name: 'Analytics Lab', href: '/analytics', icon: Zap },
   { name: 'Market Intel', href: '/market', icon: Globe },
   { name: 'Smart Match', href: '/matching', icon: Crosshair },
+  { name: 'Performance', href: '/performance', icon: Activity },
   { name: 'Sync Status', href: '/sync', icon: RefreshCw },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]

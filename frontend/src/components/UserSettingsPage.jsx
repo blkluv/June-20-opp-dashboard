@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ApiClient } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import { userPreferencesSchema } from '@/lib/validation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -109,7 +109,6 @@ export default function UserSettingsPage() {
 
   const [newKeyword, setNewKeyword] = useState('')
   const [newExcludeKeyword, setNewExcludeKeyword] = useState('')
-  const apiClient = new ApiClient()
 
   // Load preferences on component mount
   useEffect(() => {

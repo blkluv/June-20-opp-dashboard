@@ -1,5 +1,7 @@
 // Comprehensive Error Reporting & Performance Monitoring System
-// Production-ready monitoring without external dependencies
+// Production-ready monitoring integrated with analytics providers
+
+import { analyticsManager } from './analytics'
 
 class MonitoringService {
   constructor() {
@@ -18,6 +20,7 @@ class MonitoringService {
     this.performanceQueue = []
     this.userSession = this.initializeSession()
     this.isInitialized = false
+    this.analytics = analyticsManager
     
     this.init()
   }
@@ -43,6 +46,9 @@ class MonitoringService {
   init() {
     if (this.isInitialized || !this.config.enabled) return
     
+    // Initialize analytics integration
+    this.analytics.init()
+    
     this.setupErrorHandlers()
     this.setupPerformanceMonitoring()
     this.setupUnloadHandler()
@@ -50,6 +56,12 @@ class MonitoringService {
     
     this.isInitialized = true
     console.log('🔍 Monitoring service initialized')
+    
+    // Track monitoring initialization
+    this.analytics.track('monitoring_service_initialized', {
+      environment: this.config.environment,
+      version: this.config.version
+    })
   }
 
   setupErrorHandlers() {
@@ -304,6 +316,20 @@ class MonitoringService {
       error: error?.message,
       timestamp: Date.now(),
     })
+    
+    // Send to analytics
+    this.analytics.performanceMetric('api_response_time', duration, {
+      endpoint,
+      method,
+      status
+    })
+    
+    // Track errors in analytics
+    if (error) {
+      this.analytics.trackError(error, {
+        api: { endpoint, method, status, duration }
+      })
+    }
   }
 
   // Custom event tracking
