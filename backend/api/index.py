@@ -340,6 +340,9 @@ class handler(BaseHTTPRequestHandler):
             response = self.get_personalized_opportunities()
         elif path == '/scraping/advanced':
             response = self.handle_advanced_scraping()
+        elif path.startswith('/cron/'):
+            # Handle cron job endpoints
+            response = self.handle_cron_endpoint(path)
         else:
             response = {
                 'error': 'Not Found',
@@ -3420,3 +3423,212 @@ class handler(BaseHTTPRequestHandler):
             ]
         
         return recommendations[:5]  # Limit to 5 recommendations
+    
+    def handle_cron_endpoint(self, path):
+        """Handle cron job endpoints with authentication"""
+        # Authentication check for cron endpoints
+        auth_token = self.headers.get('Authorization')
+        cron_secret = os.getenv('CRON_SECRET', 'opportunity-dashboard-cron-secret-2024')
+        
+        if not auth_token or auth_token != f'Bearer {cron_secret}':
+            return {
+                'error': 'Unauthorized',
+                'message': 'Valid authorization token required for cron endpoints',
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        # Remove /cron/ prefix
+        cron_path = path[6:]  # Remove '/cron/'
+        
+        if cron_path == 'health':
+            return {
+                'status': 'healthy',
+                'service': 'cron-service',
+                'enhanced_services': False,  # Will be True when enhanced services are available
+                'timestamp': datetime.now().isoformat()
+            }
+        elif cron_path == '' or cron_path == '/':
+            return {
+                'message': 'Opportunity Dashboard Cron Service',
+                'version': '1.0.0',
+                'status': 'healthy',
+                'enhanced_services': False,
+                'endpoints': [
+                    '/cron/sync-all',
+                    '/cron/sync-sam',
+                    '/cron/sync-grants',
+                    '/cron/sync-usa-spending',
+                    '/cron/cleanup',
+                    '/cron/health'
+                ],
+                'timestamp': datetime.now().isoformat()
+            }
+        elif cron_path == 'sync-all':
+            return self.handle_cron_sync_all()
+        elif cron_path == 'sync-sam':
+            return self.handle_cron_sync_source('SAM.gov')
+        elif cron_path == 'sync-grants':
+            return self.handle_cron_sync_source('Grants.gov')
+        elif cron_path == 'sync-usa-spending':
+            return self.handle_cron_sync_source('USASpending.gov')
+        elif cron_path == 'cleanup':
+            return self.handle_cron_cleanup()
+        else:
+            return {
+                'error': 'Endpoint not found',
+                'available_endpoints': ['/sync-all', '/sync-sam', '/sync-grants', '/sync-usa-spending', '/cleanup', '/health'],
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    def handle_cron_sync_all(self):
+        """Handle sync all sources via cron (fallback implementation)"""
+        start_time = datetime.now()
+        
+        try:
+            # For now, use the existing sync functionality
+            # This will be enhanced when database services are available
+            print("INFO: Starting cron sync-all operation")
+            
+            # Get fresh opportunities using existing method
+            fetcher = OpportunityFetcher()
+            opportunities = fetcher.get_real_opportunities()
+            
+            # Update in-memory sync status
+            current_time = datetime.now().isoformat()
+            for source_name in SYNC_STATUS_DATA['sources']:
+                source_opps = [o for o in opportunities if source_name.replace('_', '.') in o.get('source_name', '').lower()]
+                SYNC_STATUS_DATA['sources'][source_name].update({
+                    'status': 'completed',
+                    'last_sync': current_time,
+                    'records_processed': len(source_opps),
+                    'records_added': len(source_opps),
+                    'records_updated': 0
+                })
+            
+            SYNC_STATUS_DATA['last_sync_total_processed'] = len(opportunities)
+            SYNC_STATUS_DATA['last_sync_total_added'] = len(opportunities)
+            
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            
+            return {
+                'status': 'completed',
+                'total_processed': len(opportunities),
+                'total_added': len(opportunities),
+                'total_updated': 0,
+                'duration_ms': duration_ms,
+                'sources_synced': len(SYNC_STATUS_DATA['sources']),
+                'message': 'Fallback sync completed - data not persisted to database',
+                'timestamp': start_time.isoformat(),
+                'completed_at': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            print(f"ERROR: Cron sync-all failed: {e}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'timestamp': start_time.isoformat(),
+                'duration_ms': duration_ms
+            }
+    
+    def handle_cron_sync_source(self, source_name):
+        """Handle sync for a specific source via cron (fallback implementation)"""
+        start_time = datetime.now()
+        
+        try:
+            print(f"INFO: Starting cron sync for {source_name}")
+            
+            # Create a limited fetcher for the specific source
+            fetcher = OpportunityFetcher()
+            
+            if 'sam' in source_name.lower():
+                sam_api_key = os.environ.get('SAM_API_KEY')
+                if not sam_api_key:
+                    return {
+                        'status': 'error',
+                        'message': 'SAM_API_KEY not configured',
+                        'source': source_name,
+                        'timestamp': start_time.isoformat()
+                    }
+                opportunities = fetcher.fetch_sam_opportunities()[:50]  # Limit for cron
+            elif 'grants' in source_name.lower():
+                opportunities = fetcher.fetch_grants_opportunities()[:50]
+            elif 'spending' in source_name.lower():
+                opportunities = fetcher.fetch_usa_spending_opportunities()[:50]
+            else:
+                return {
+                    'status': 'error',
+                    'message': f'Unknown source: {source_name}',
+                    'source': source_name,
+                    'timestamp': start_time.isoformat()
+                }
+            
+            # Update source status
+            source_key = source_name.lower().replace('.', '_').replace('gov', 'gov')
+            if source_key in SYNC_STATUS_DATA['sources']:
+                SYNC_STATUS_DATA['sources'][source_key].update({
+                    'status': 'completed',
+                    'last_sync': datetime.now().isoformat(),
+                    'records_processed': len(opportunities),
+                    'records_added': len(opportunities),
+                    'records_updated': 0
+                })
+            
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            
+            return {
+                'status': 'completed',
+                'source': source_name,
+                'processed': len(opportunities),
+                'added': len(opportunities),
+                'updated': 0,
+                'failed': 0,
+                'duration_ms': duration_ms,
+                'message': 'Fallback sync completed - data not persisted to database',
+                'timestamp': start_time.isoformat(),
+                'completed_at': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            print(f"ERROR: Cron sync {source_name} failed: {e}")
+            return {
+                'status': 'error',
+                'source': source_name,
+                'error': str(e),
+                'timestamp': start_time.isoformat(),
+                'duration_ms': duration_ms
+            }
+    
+    def handle_cron_cleanup(self):
+        """Handle cleanup via cron (placeholder for database cleanup)"""
+        start_time = datetime.now()
+        
+        try:
+            print("INFO: Starting cron cleanup operation")
+            
+            # For now, this is a placeholder since we don't have database access
+            # In the enhanced version, this would clean old records from Supabase
+            
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            
+            return {
+                'status': 'completed',
+                'opportunities_deleted': 0,
+                'logs_deleted': 0,
+                'duration_ms': duration_ms,
+                'message': 'Cleanup placeholder - enhanced database cleanup not yet available',
+                'timestamp': start_time.isoformat(),
+                'completed_at': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            print(f"ERROR: Cron cleanup failed: {e}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'timestamp': start_time.isoformat(),
+                'duration_ms': duration_ms
+            }
