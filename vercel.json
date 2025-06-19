@@ -1,14 +1,12 @@
 {
-  "builds": [
-    {
-      "src": "backend/api/index.py",
-      "use": "@vercel/python"
+  "functions": {
+    "backend/api/index.py": {
+      "runtime": "python3.9"
     },
-    {
-      "src": "backend/api/cron.py",
-      "use": "@vercel/python"
+    "backend/api/cron.py": {
+      "runtime": "python3.9"
     }
-  ],
+  },
   "routes": [
     {
       "src": "/api/cron/(.*)",
@@ -25,16 +23,6 @@
     {
       "src": "/(.*)",
       "dest": "/backend/api/index.py"
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/sync-all",
-      "schedule": "0 */30 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup", 
-      "schedule": "0 2 * * *"
     }
   ]
 }
