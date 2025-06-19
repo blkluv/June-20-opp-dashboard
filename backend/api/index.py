@@ -72,7 +72,7 @@ class handler(BaseHTTPRequestHandler):
         if path == '/' or path == '':
             response = {
                 'message': 'Opportunity Dashboard API',
-                'version': '1.0.4',
+                'version': '1.0.4-cron-enabled',
                 'status': 'healthy',
                 'endpoints': [
                     '/api/health',
