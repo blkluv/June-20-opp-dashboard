@@ -1,3 +1,5 @@
+import { monitoring } from './monitoring'
+
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-fev91zedw-jacobs-projects-cf4c7bdb.vercel.app/api'
 
@@ -19,21 +21,38 @@ class ApiClient {
       ...options,
     }
 
+    const startTime = performance.now()
+    const method = config.method || 'GET'
+
     try {
       console.log(`API Base URL: ${this.baseURL}`)
       console.log(`Making API request to: ${url}`)
       const response = await fetch(url, config)
       console.log(`API response for ${endpoint}:`, response.status, response.statusText)
       
+      const duration = performance.now() - startTime
+      
       if (!response.ok) {
+        // Capture failed API call
+        monitoring.captureApiCall(endpoint, method, duration, response.status)
+        
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
       const data = await response.json()
+      
+      // Capture successful API call
+      monitoring.captureApiCall(endpoint, method, duration, 'success')
+      
       console.log(`API data for ${endpoint}:`, data)
       return data
     } catch (error) {
+      const duration = performance.now() - startTime
+      
+      // Capture error details
+      monitoring.captureApiCall(endpoint, method, duration, 'error', error)
+      
       console.error(`API request failed: ${endpoint}`, error)
       throw error
     }

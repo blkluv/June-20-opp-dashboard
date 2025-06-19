@@ -15,7 +15,8 @@ import {
   BarChart3,
   Zap,
   Globe,
-  Crosshair
+  Crosshair,
+  Database
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'My Opportunities', href: '/personalized', icon: Target },
   { name: 'All Opportunities', href: '/opportunities', icon: FileText },
   { name: 'AI Discovery', href: '/perplexity', icon: Brain },
+  { name: 'Web Scraping', href: '/scraping', icon: Database },
   { name: 'Intelligence', href: '/intelligence', icon: BarChart3 },
   { name: 'Analytics Lab', href: '/analytics', icon: Zap },
   { name: 'Market Intel', href: '/market', icon: Globe },

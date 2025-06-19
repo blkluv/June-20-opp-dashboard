@@ -2,6 +2,7 @@ import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
+import { captureComponentError } from '@/lib/monitoring'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -27,10 +28,8 @@ class ErrorBoundary extends React.Component {
       errorInfo: errorInfo
     })
 
-    // In production, you would send this to an error reporting service
-    if (process.env.NODE_ENV === 'production') {
-      // Example: Sentry.captureException(error, { contexts: { errorInfo } })
-    }
+    // Send error to monitoring service
+    captureComponentError(error, errorInfo)
   }
 
   handleReset = () => {
