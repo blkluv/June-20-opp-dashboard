@@ -24,7 +24,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/frontend/dist/index.html"
+      "dest": "/backend/api/index.py"
     }
   ],
   "crons": [
