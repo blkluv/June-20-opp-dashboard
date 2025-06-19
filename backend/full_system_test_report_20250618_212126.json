@@ -1,0 +1,28 @@
+{
+  "status": "needs_work",
+  "success_rate": 50.0,
+  "total_opportunities": 10,
+  "components": {
+    "Data Fetching": [
+      1,
+      3
+    ],
+    "Database Operations": [
+      0,
+      1
+    ],
+    "Background Jobs": [
+      1,
+      1
+    ],
+    "API Integration": [
+      1,
+      1
+    ]
+  },
+  "source_results": {
+    "SAM.gov": 0,
+    "Grants.gov": 0,
+    "USASpending.gov": 10
+  }
+}
