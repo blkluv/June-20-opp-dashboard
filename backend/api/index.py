@@ -292,7 +292,7 @@ class handler(BaseHTTPRequestHandler):
         if path == '/' or path == '':
             response = {
                 'message': 'Enhanced Opportunity Dashboard API',
-                'version': '2.0.0',
+                'version': '2.0.1',
                 'status': 'healthy',
                 'enhanced_services': ENHANCED_SERVICES_AVAILABLE,
                 'endpoints': [
