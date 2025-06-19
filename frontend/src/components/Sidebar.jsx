@@ -22,7 +22,8 @@ import { cn } from '@/lib/utils'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Opportunities', href: '/opportunities', icon: FileText },
+  { name: 'My Opportunities', href: '/personalized', icon: Target },
+  { name: 'All Opportunities', href: '/opportunities', icon: FileText },
   { name: 'AI Discovery', href: '/perplexity', icon: Brain },
   { name: 'Intelligence', href: '/intelligence', icon: BarChart3 },
   { name: 'Analytics Lab', href: '/analytics', icon: Zap },
