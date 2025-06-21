@@ -1,0 +1,38 @@
+{
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.9"
+    },
+    "api/cron.py": {
+      "runtime": "python3.9"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/cron/(.*)",
+      "dest": "/api/cron.py"
+    },
+    {
+      "src": "/cron/(.*)",
+      "dest": "/api/cron.py"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.py"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/sync-all",
+      "schedule": "0 */30 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup", 
+      "schedule": "0 2 * * *"
+    }
+  ]
+} 

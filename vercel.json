@@ -1,28 +1,13 @@
 {
   "functions": {
-    "backend/api/index.py": {
+    "api/index.py": {
       "runtime": "python3.9"
     },
-    "backend/api/cron.py": {
+    "api/test.py": {
       "runtime": "python3.9"
+    },
+    "api/hello.js": {
+      "runtime": "nodejs18.x"
     }
-  },
-  "routes": [
-    {
-      "src": "/api/cron/(.*)",
-      "dest": "/backend/api/cron.py"
-    },
-    {
-      "src": "/cron/(.*)",
-      "dest": "/backend/api/cron.py"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "/backend/api/index.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/backend/api/index.py"
-    }
-  ]
+  }
 }

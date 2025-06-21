@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Opportunity Dashboard API Test</title>
+</head>
+<body>
+    <h1>API Test Page</h1>
+    <p>Testing API endpoints...</p>
+    
+    <script>
+        // Test API endpoints
+        fetch('/api/health')
+            .then(response => response.json())
+            .then(data => {
+                document.body.innerHTML += '<h2>API Health:</h2><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            })
+            .catch(error => {
+                document.body.innerHTML += '<h2>API Error:</h2><pre>' + error + '</pre>';
+            });
+            
+        fetch('/')
+            .then(response => response.json())
+            .then(data => {
+                document.body.innerHTML += '<h2>Root API:</h2><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            })
+            .catch(error => {
+                document.body.innerHTML += '<h2>Root Error:</h2><pre>' + error + '</pre>';
+            });
+    </script>
+</body>
+</html> 

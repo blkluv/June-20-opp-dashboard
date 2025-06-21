@@ -1,0 +1,628 @@
+"""
+Enhanced API handler with Supabase integration, background jobs, and source rotation
+This is the new main API that will replace index.py once deployed
+"""
+from http.server import BaseHTTPRequestHandler
+import json
+import urllib.parse
+import os
+import sys
+import logging
+from datetime import datetime, timedelta
+
+# Add src directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from dotenv import load_dotenv
+load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+try:
+    from src.services.database_service import get_database_service
+    from src.services.background_jobs import get_job_manager, get_rotation_manager
+    from src.api.data_fetcher import DataFetcher
+    SERVICES_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import services (running in limited mode): {e}")
+    SERVICES_AVAILABLE = False
+
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        # Parse the URL path
+        path = self.path
+        
+        # Debug: Log the actual path received
+        logger.info(f"Received GET request: {path}")
+        
+        # Normalize path for Vercel deployment
+        if path.startswith('/api'):
+            path = path[4:]  # Remove '/api' prefix
+        if not path:
+            path = '/'
+        
+        # Set CORS headers
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+        
+        # Route handling
+        try:
+            if path == '/' or path == '':
+                response = self._handle_root()
+            elif path == '/health':
+                response = self._handle_health()
+            elif path == '/sync/status':
+                response = self._handle_sync_status()
+            elif path == '/opportunities':
+                response = self._handle_opportunities(self.path)
+            elif path == '/opportunities/stats':
+                response = self._handle_opportunity_stats()
+            elif path == '/scraping/sources':
+                response = self._handle_scraping_sources()
+            elif path == '/jobs/status':
+                response = self._handle_job_status()
+            elif path == '/sources/rotation':
+                response = self._handle_source_rotation()
+            else:
+                response = self._handle_not_found(path)
+            
+        except Exception as e:
+            logger.error(f"Error handling GET {path}: {e}")
+            response = {
+                'error': 'Internal Server Error',
+                'message': str(e),
+                'path': path
+            }
+        
+        # Send response
+        self.wfile.write(json.dumps(response).encode())
+    
+    def do_POST(self):
+        # Set CORS headers
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+        
+        path = self.path
+        
+        # Normalize path for Vercel deployment
+        if path.startswith('/api'):
+            path = path[4:]  # Remove '/api' prefix
+        if not path:
+            path = '/'
+        
+        logger.info(f"Received POST request: {path}")
+        
+        try:
+            # Parse request body if present
+            content_length = int(self.headers.get('Content-Length', 0))
+            request_body = {}
+            if content_length > 0:
+                body = self.rfile.read(content_length)
+                try:
+                    request_body = json.loads(body.decode('utf-8'))
+                except json.JSONDecodeError:
+                    request_body = {}
+            
+            if path == '/sync':
+                response = self._handle_sync(request_body)
+            elif path == '/sync/source':
+                response = self._handle_sync_source(request_body)
+            elif path == '/scraping/test':
+                response = self._handle_scraping_test(request_body)
+            elif path == '/scraping/sync-all':
+                response = self._handle_scraping_sync_all()
+            elif path == '/jobs/trigger':
+                response = self._handle_trigger_job(request_body)
+            else:
+                response = self._handle_not_found(path)
+                
+        except Exception as e:
+            logger.error(f"Error handling POST {path}: {e}")
+            response = {
+                'error': 'Internal Server Error',
+                'message': str(e),
+                'path': path
+            }
+        
+        self.wfile.write(json.dumps(response).encode())
+    
+    def do_OPTIONS(self):
+        """Handle preflight CORS requests"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Max-Age', '86400')
+        self.end_headers()
+    
+    # ========================================
+    # GET REQUEST HANDLERS
+    # ========================================
+    
+    def _handle_root(self) -> dict:
+        """Handle root endpoint"""
+        return {
+            'message': 'Opportunity Dashboard API - Enhanced',
+            'version': '2.0.0',
+            'status': 'healthy',
+            'features': {
+                'database_caching': SERVICES_AVAILABLE,
+                'background_jobs': SERVICES_AVAILABLE,
+                'source_rotation': SERVICES_AVAILABLE,
+                'supabase_integration': SERVICES_AVAILABLE
+            },
+            'endpoints': [
+                '/api/health',
+                '/api/opportunities',
+                '/api/opportunities/stats',
+                '/api/sync/status',
+                '/api/sync',
+                '/api/sync/source',
+                '/api/scraping/sources',
+                '/api/scraping/test',
+                '/api/scraping/sync-all',
+                '/api/jobs/status',
+                '/api/jobs/trigger',
+                '/api/sources/rotation'
+            ]
+        }
+    
+    def _handle_health(self) -> dict:
+        """Handle health check"""
+        health_status = {
+            'status': 'healthy',
+            'service': 'opportunity-dashboard-backend-enhanced',
+            'timestamp': datetime.now().isoformat(),
+            'services': {}
+        }
+        
+        if SERVICES_AVAILABLE:
+            try:
+                # Test database connection
+                db_service = get_database_service()
+                db_healthy = db_service.test_connection()
+                health_status['services']['database'] = 'healthy' if db_healthy else 'unhealthy'
+                
+                # Test job manager
+                job_manager = get_job_manager()
+                health_status['services']['background_jobs'] = 'running' if job_manager.is_running else 'stopped'
+                
+                # Overall status
+                if not db_healthy:
+                    health_status['status'] = 'degraded'
+                    
+            except Exception as e:
+                health_status['status'] = 'unhealthy'
+                health_status['error'] = str(e)
+        else:
+            health_status['status'] = 'limited'
+            health_status['message'] = 'Running in limited mode without enhanced services'
+        
+        return health_status
+    
+    def _handle_sync_status(self) -> dict:
+        """Handle sync status request"""
+        if not SERVICES_AVAILABLE:
+            return self._fallback_sync_status()
+        
+        try:
+            db_service = get_database_service()
+            return db_service.get_sync_status()
+        except Exception as e:
+            logger.error(f"Failed to get sync status: {e}")
+            return self._fallback_sync_status()
+    
+    def _handle_opportunities(self, full_path: str) -> dict:
+        """Handle opportunities request with caching"""
+        if not SERVICES_AVAILABLE:
+            return self._fallback_opportunities()
+        
+        try:
+            # Parse query parameters
+            parsed_url = urllib.parse.urlparse(full_path)
+            params = urllib.parse.parse_qs(parsed_url.query)
+            
+            # Extract parameters
+            limit = int(params.get('limit', [100])[0])
+            offset = int(params.get('offset', [0])[0])
+            source_type = params.get('source_type', [None])[0]
+            min_score = int(params.get('min_score', [0])[0]) if params.get('min_score') else None
+            search_query = params.get('search', [None])[0]
+            
+            # Get from database
+            db_service = get_database_service()
+            result = db_service.get_opportunities(
+                limit=limit,
+                offset=offset,
+                source_type=source_type,
+                min_score=min_score,
+                search_query=search_query
+            )
+            
+            # If no cached data, try to fetch fresh data
+            if not result['opportunities'] and not offset:
+                logger.info("No cached data found, triggering background sync")
+                self._trigger_background_sync()
+                
+                # Return empty result with message
+                result['message'] = 'No cached data available. Background sync triggered - please try again in a few minutes.'
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to get opportunities: {e}")
+            return self._fallback_opportunities()
+    
+    def _handle_opportunity_stats(self) -> dict:
+        """Handle opportunity statistics request"""
+        if not SERVICES_AVAILABLE:
+            return self._fallback_stats()
+        
+        try:
+            db_service = get_database_service()
+            return db_service.get_opportunity_stats()
+        except Exception as e:
+            logger.error(f"Failed to get opportunity stats: {e}")
+            return self._fallback_stats()
+    
+    def _handle_scraping_sources(self) -> dict:
+        """Handle scraping sources request"""
+        firecrawl_api_key = os.environ.get('FIRECRAWL_API_KEY')
+        if not firecrawl_api_key:
+            return {
+                'error': 'Firecrawl service not available',
+                'message': 'Set FIRECRAWL_API_KEY environment variable to enable web scraping',
+                'sources': []
+            }
+        
+        # Return available scraping sources
+        sources = [
+            {
+                'key': 'california_procurement',
+                'name': 'California eProcure',
+                'url': 'https://caleprocure.ca.gov/pages/public-search.aspx',
+                'type': 'state_rfp'
+            },
+            {
+                'key': 'texas_procurement',
+                'name': 'Texas SmartBuy',
+                'url': 'https://www.txsmartbuy.com/sp',
+                'type': 'state_rfp'
+            },
+            {
+                'key': 'nasa_procurement',
+                'name': 'NASA SEWP',
+                'url': 'https://www.sewp.nasa.gov/',
+                'type': 'federal_direct'
+            }
+        ]
+        
+        return {
+            'sources': sources,
+            'total': len(sources),
+            'firecrawl_status': 'available'
+        }
+    
+    def _handle_job_status(self) -> dict:
+        """Handle job status request"""
+        if not SERVICES_AVAILABLE:
+            return {
+                'error': 'Background jobs not available',
+                'message': 'Enhanced services not loaded'
+            }
+        
+        try:
+            job_manager = get_job_manager()
+            return job_manager.get_job_status()
+        except Exception as e:
+            logger.error(f"Failed to get job status: {e}")
+            return {
+                'error': str(e),
+                'is_running': False
+            }
+    
+    def _handle_source_rotation(self) -> dict:
+        """Handle source rotation request"""
+        if not SERVICES_AVAILABLE:
+            return {
+                'error': 'Source rotation not available',
+                'message': 'Enhanced services not loaded'
+            }
+        
+        try:
+            rotation_manager = get_rotation_manager()
+            optimal_order = rotation_manager.get_optimal_source_order()
+            
+            db_service = get_database_service()
+            next_source = db_service.get_next_source_to_sync()
+            
+            return {
+                'optimal_order': [source['name'] for source in optimal_order],
+                'next_source': next_source['name'] if next_source else None,
+                'rotation_enabled': True
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get source rotation: {e}")
+            return {
+                'error': str(e),
+                'rotation_enabled': False
+            }
+    
+    # ========================================
+    # POST REQUEST HANDLERS
+    # ========================================
+    
+    def _handle_sync(self, request_body: dict) -> dict:
+        """Handle full sync request"""
+        if not SERVICES_AVAILABLE:
+            return self._fallback_sync()
+        
+        try:
+            job_manager = get_job_manager()
+            result = job_manager.trigger_immediate_sync()
+            
+            return {
+                'success': result.get('success', False),
+                'message': result.get('message', 'Sync triggered'),
+                'sources_synced': result.get('sources_synced', 0),
+                'total_processed': result.get('total_processed', 0),
+                'total_added': result.get('total_added', 0),
+                'results': result.get('results', [])
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to trigger sync: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Sync failed'
+            }
+    
+    def _handle_sync_source(self, request_body: dict) -> dict:
+        """Handle single source sync request"""
+        source_name = request_body.get('source_name')
+        if not source_name:
+            return {
+                'success': False,
+                'error': 'source_name required',
+                'message': 'Please specify source_name in request body'
+            }
+        
+        if not SERVICES_AVAILABLE:
+            return {
+                'success': False,
+                'error': 'Enhanced services not available',
+                'message': 'Cannot sync individual sources without database services'
+            }
+        
+        try:
+            job_manager = get_job_manager()
+            result = job_manager.trigger_immediate_sync(source_name)
+            
+            return {
+                'success': result.get('success', False),
+                'source': source_name,
+                'records_processed': result.get('records_processed', 0),
+                'records_added': result.get('records_added', 0),
+                'message': result.get('message', f'Sync completed for {source_name}'),
+                'error': result.get('error')
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to sync source {source_name}: {e}")
+            return {
+                'success': False,
+                'source': source_name,
+                'error': str(e),
+                'message': f'Failed to sync {source_name}'
+            }
+    
+    def _handle_scraping_test(self, request_body: dict) -> dict:
+        """Handle Firecrawl test request"""
+        firecrawl_api_key = os.environ.get('FIRECRAWL_API_KEY')
+        if not firecrawl_api_key:
+            return {
+                'success': False,
+                'error': 'Firecrawl API key not configured',
+                'message': 'Set FIRECRAWL_API_KEY environment variable to enable web scraping'
+            }
+        
+        try:
+            import requests
+            
+            clean_api_key = firecrawl_api_key.strip().replace('\n', '').replace('\r', '')
+            
+            headers = {
+                'Authorization': f'Bearer {clean_api_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            payload = {
+                'url': request_body.get('url', 'https://example.com')
+            }
+            
+            response = requests.post(
+                'https://api.firecrawl.dev/v0/scrape',
+                headers=headers,
+                json=payload,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                content_length = len(data.get('data', {}).get('content', ''))
+                return {
+                    'success': True,
+                    'message': 'Firecrawl service test successful',
+                    'test_url': payload['url'],
+                    'content_length': content_length,
+                    'status_code': response.status_code
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'API test failed with status {response.status_code}',
+                    'message': f'Firecrawl API returned: {response.text[:200]}',
+                    'status_code': response.status_code
+                }
+                
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Firecrawl service test failed'
+            }
+    
+    def _handle_scraping_sync_all(self) -> dict:
+        """Handle scrape all sources request"""
+        if not SERVICES_AVAILABLE:
+            return {
+                'success': False,
+                'error': 'Enhanced services not available',
+                'message': 'Cannot sync scraping sources without database services'
+            }
+        
+        try:
+            # Trigger Firecrawl sync specifically
+            job_manager = get_job_manager()
+            result = job_manager.trigger_immediate_sync('Firecrawl')
+            
+            return {
+                'success': result.get('success', False),
+                'message': 'Firecrawl scraping sync completed',
+                'records_processed': result.get('records_processed', 0),
+                'records_added': result.get('records_added', 0),
+                'error': result.get('error')
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to sync scraping sources: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Scraping sync failed'
+            }
+    
+    def _handle_trigger_job(self, request_body: dict) -> dict:
+        """Handle trigger background job request"""
+        if not SERVICES_AVAILABLE:
+            return {
+                'success': False,
+                'error': 'Background jobs not available',
+                'message': 'Enhanced services not loaded'
+            }
+        
+        job_type = request_body.get('job_type', 'sync')
+        
+        try:
+            job_manager = get_job_manager()
+            
+            if job_type == 'sync':
+                result = job_manager.trigger_immediate_sync()
+            else:
+                return {
+                    'success': False,
+                    'error': f'Unknown job type: {job_type}',
+                    'available_types': ['sync']
+                }
+            
+            return {
+                'success': True,
+                'job_type': job_type,
+                'message': f'{job_type} job triggered successfully',
+                'result': result
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to trigger job {job_type}: {e}")
+            return {
+                'success': False,
+                'job_type': job_type,
+                'error': str(e),
+                'message': f'Failed to trigger {job_type} job'
+            }
+    
+    # ========================================
+    # HELPER METHODS
+    # ========================================
+    
+    def _handle_not_found(self, path: str) -> dict:
+        """Handle 404 not found"""
+        return {
+            'error': 'Not Found',
+            'message': f'Endpoint {path} not found',
+            'available_endpoints': [
+                '/api', '/api/health', '/api/opportunities', '/api/sync/status',
+                '/api/sync', '/api/jobs/status', '/api/sources/rotation'
+            ]
+        }
+    
+    def _trigger_background_sync(self):
+        """Trigger background sync if services are available"""
+        if SERVICES_AVAILABLE:
+            try:
+                job_manager = get_job_manager()
+                job_manager.trigger_immediate_sync()
+                logger.info("Background sync triggered")
+            except Exception as e:
+                logger.error(f"Failed to trigger background sync: {e}")
+    
+    # ========================================
+    # FALLBACK METHODS (for when services aren't available)
+    # ========================================
+    
+    def _fallback_sync_status(self) -> dict:
+        """Fallback sync status when services aren't available"""
+        return {
+            'status': 'limited',
+            'message': 'Running in limited mode - enhanced sync status not available',
+            'total_sources': 3,
+            'active_sources': 3,
+            'last_sync_total_processed': 0,
+            'last_sync_total_added': 0,
+            'sources': {
+                'grants_gov': {'status': 'available', 'last_sync': None},
+                'sam_gov': {'status': 'available', 'last_sync': None},
+                'usa_spending': {'status': 'available', 'last_sync': None}
+            }
+        }
+    
+    def _fallback_opportunities(self) -> dict:
+        """Fallback opportunities when services aren't available"""
+        return {
+            'opportunities': [],
+            'total': 0,
+            'message': 'No cached data available - enhanced services required for caching',
+            'error': 'Database services not available'
+        }
+    
+    def _fallback_stats(self) -> dict:
+        """Fallback stats when services aren't available"""
+        return {
+            'total_opportunities': 0,
+            'active_opportunities': 0,
+            'total_value': 0,
+            'avg_score': 0,
+            'by_type': {},
+            'by_agency': {},
+            'message': 'Enhanced services required for detailed statistics'
+        }
+    
+    def _fallback_sync(self) -> dict:
+        """Fallback sync when services aren't available"""
+        return {
+            'success': False,
+            'message': 'Enhanced sync requires database services',
+            'error': 'Database services not available'
+        }
