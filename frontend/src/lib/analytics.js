@@ -2,35 +2,62 @@
 // Comprehensive user behavior tracking with privacy-first approach
 
 import React from 'react'
-import { monitoring } from './monitoring'
-import { experimentManager } from './experiments'
+
+// Safe imports with fallbacks
+let monitoring, experimentManager
+try {
+  monitoring = require('./monitoring').monitoring
+} catch (e) {
+  monitoring = { captureApiCall: () => {}, captureError: () => {} }
+}
+
+try {
+  experimentManager = require('./experiments').experimentManager
+} catch (e) {
+  experimentManager = { getActiveExperiments: () => [], getVariant: () => null }
+}
 
 class AnalyticsManager {
   constructor() {
-    this.config = {
-      enabled: import.meta.env.PROD || import.meta.env.VITE_ENABLE_ANALYTICS === 'true',
-      enableLogging: import.meta.env.DEV,
-      apiEndpoint: '/api/analytics',
-      userId: this.getUserId(),
-      sessionId: this.getSessionId(),
-      batchSize: 20,
-      flushInterval: 30000, // 30 seconds
-      maxQueueSize: 1000,
-      enableHeatmaps: true,
-      enableScrollTracking: true,
-      enableClickTracking: true,
-      enableFormTracking: true,
-      privacyMode: localStorage.getItem('analytics_privacy_mode') === 'true'
+    try {
+      // Initialize privacy mode first
+      const privacyMode = localStorage.getItem('analytics_privacy_mode') === 'true'
+      
+      this.config = {
+        enabled: import.meta.env.PROD || import.meta.env.VITE_ENABLE_ANALYTICS === 'true',
+        enableLogging: import.meta.env.DEV,
+        apiEndpoint: '/api/analytics',
+        batchSize: 20,
+        flushInterval: 30000, // 30 seconds
+        maxQueueSize: 1000,
+        enableHeatmaps: true,
+        enableScrollTracking: true,
+        enableClickTracking: true,
+        enableFormTracking: true,
+        privacyMode: privacyMode
+      }
+      
+      // Set user and session IDs after config is initialized
+      this.config.userId = this.getUserId()
+      this.config.sessionId = this.getSessionId()
+      
+      this.eventQueue = []
+      this.userProperties = new Map()
+      this.sessionProperties = new Map()
+      this.pageViewId = null
+      this.startTime = Date.now()
+      this.isInitialized = false
+      
+      this.init()
+    } catch (error) {
+      console.warn('Analytics initialization failed:', error)
+      // Set up minimal config to prevent further errors
+      this.config = { enabled: false, enableLogging: false }
+      this.eventQueue = []
+      this.userProperties = new Map()
+      this.sessionProperties = new Map()
+      this.isInitialized = false
     }
-    
-    this.eventQueue = []
-    this.userProperties = new Map()
-    this.sessionProperties = new Map()
-    this.pageViewId = null
-    this.startTime = Date.now()
-    this.isInitialized = false
-    
-    this.init()
   }
 
   async init() {
@@ -49,7 +76,9 @@ class AnalyticsManager {
     let userId = localStorage.getItem('analytics_user_id')
     if (!userId) {
       userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-      if (!this.config.privacyMode) {
+      // Check privacy mode safely
+      const privacyMode = localStorage.getItem('analytics_privacy_mode') === 'true'
+      if (!privacyMode) {
         localStorage.setItem('analytics_user_id', userId)
       }
     }

@@ -1,5 +1,21 @@
-import { monitoring } from './monitoring'
-import { analyticsManager } from './analytics'
+// Safe imports with fallbacks
+let monitoring, analyticsManager
+
+try {
+  monitoring = require('./monitoring').monitoring
+} catch (e) {
+  monitoring = { 
+    captureApiCall: () => {},
+    captureError: () => {}
+  }
+}
+
+try {
+  analyticsManager = require('./analytics').analyticsManager
+} catch (e) {
+  // Fallback to safe analytics manager
+  analyticsManager = require('./analytics-safe').analyticsManager
+}
 
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-fev91zedw-jacobs-projects-cf4c7bdb.vercel.app/api'

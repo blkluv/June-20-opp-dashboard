@@ -21,7 +21,13 @@ import {
   BarChart3
 } from 'lucide-react'
 import { useWebVitals, usePerformanceMetric } from '@/lib/webVitals'
-import { useAnalytics } from '@/lib/analytics'
+// Safe import for analytics hook
+let useAnalytics
+try {
+  useAnalytics = require('../lib/analytics').useAnalytics
+} catch (e) {
+  useAnalytics = require('../lib/analytics-safe').useAnalytics
+}
 import { useExperiment } from '@/lib/experiments'
 import { monitoring } from '@/lib/monitoring'
 

@@ -1,7 +1,13 @@
 // Comprehensive Error Reporting & Performance Monitoring System
 // Production-ready monitoring integrated with analytics providers
 
-import { analyticsManager } from './analytics'
+// Safe import for analytics
+let analyticsManager
+try {
+  analyticsManager = require('./analytics').analyticsManager
+} catch (e) {
+  analyticsManager = require('./analytics-safe').analyticsManager
+}
 
 class MonitoringService {
   constructor() {
